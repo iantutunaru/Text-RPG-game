@@ -10,7 +10,9 @@ import type {
   EquipIntent,
   GameState,
   Item,
+  Journal,
   RollResult,
+  ScenePresence,
   TimeOfDay,
 } from "../../shared/types.js";
 import { ATTRIBUTE_KEYS } from "../../shared/special.js";
@@ -144,6 +146,22 @@ export const RESOLVE_SCHEMA = {
           value: { type: "string" },
         },
         required: ["key", "value"],
+      },
+    },
+    // The named NPCs physically present with the player at the END of this turn,
+    // each with a short note (role/manner). The engine records these for the
+    // journal and the live scene tracker (see `recordScene`); they are advisory,
+    // never a mechanical gate. Empty/omitted means the player is alone. Same
+    // flat array-of-pairs shape as `setFlags` so the grammar stays small-model-safe.
+    npcsPresent: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          note: { type: "string" },
+        },
+        required: ["name"],
       },
     },
     gameOver: { type: "boolean" },
@@ -440,6 +458,79 @@ export function applyResolution(
         "Thus ended their tale beneath the Roman sky.",
     };
     effects.ended = true;
+  }
+}
+
+// --- Journal & scene tracking -------------------------------------------------
+// NPCs have no structured existence in this game — they live only in narration —
+// so Stage B reports who is present (`npcsPresent`) and the engine records it.
+// Places ARE engine-owned (`world.location`), so visited-place tracking is purely
+// deterministic. All of this is advisory: a best-effort chronicle, never a gate.
+
+const MAX_SCENE_NPCS = 8; // present NPCs recorded per turn
+const MAX_MET_NPCS = 60; // journal roster cap (first-met kept; later ones drop)
+const MAX_VISITED = 60; // journal places cap
+
+function blankJournal(): Journal {
+  return { places: [], people: [], days: [], currentDay: 1, dayLog: "" };
+}
+
+/** Loose key for deduping model-named scene entities (NPCs, places). */
+function sceneKey(s: string): string {
+  return s.trim().toLowerCase();
+}
+
+/** Record the scene the turn left behind: who is present now (replacing the live
+ *  list), any newly-met NPC and newly-visited place folded into the journal, and a
+ *  bump of the per-turn counter that keys the cached chronicle. Runs AFTER
+ *  `applyResolution` so `world.location` already reflects any move this turn.
+ *  Self-heals `journal`/`npcsPresent` on saves that predate the feature. */
+export function recordScene(state: GameState, res: Record<string, unknown>): void {
+  const journal = (state.journal ??= blankJournal());
+
+  // Who is present right now — sanitize, dedupe, cap, and replace the live list.
+  const present: ScenePresence[] = [];
+  const seen = new Set<string>();
+  const raw = Array.isArray(res.npcsPresent) ? res.npcsPresent : [];
+  for (const el of raw) {
+    if (!el || typeof el !== "object") continue;
+    const o = el as Record<string, unknown>;
+    const name = String(o.name ?? "").trim().slice(0, 40);
+    if (!name) continue;
+    const key = sceneKey(name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const note = String(o.note ?? "").trim().slice(0, 80);
+    present.push(note ? { name, note } : { name });
+    if (present.length >= MAX_SCENE_NPCS) break;
+  }
+  state.world.npcsPresent = present;
+
+  // Fold any newly-met NPC into the journal roster (logged once, never removed).
+  const known = new Set(journal.people.map((p) => sceneKey(p.name)));
+  for (const p of present) {
+    if (known.has(sceneKey(p.name))) continue;
+    if (journal.people.length >= MAX_MET_NPCS) break;
+    known.add(sceneKey(p.name));
+    journal.people.push({
+      name: p.name,
+      ...(p.note ? { note: p.note } : {}),
+      firstSeenLocation: state.world.location,
+      day: state.world.day,
+    });
+  }
+
+  // Record the current location if it's new to the journal.
+  const loc = state.world.location?.trim();
+  if (loc && journal.places.length < MAX_VISITED) {
+    const here = sceneKey(loc);
+    if (!journal.places.some((pl) => sceneKey(pl.name) === here)) {
+      journal.places.push({
+        name: loc,
+        day: state.world.day,
+        timeOfDay: state.world.timeOfDay,
+      });
+    }
   }
 }
 

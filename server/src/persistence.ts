@@ -93,5 +93,24 @@ function normalizeState(state: GameState): GameState {
     }
   }
 
+  // Journal & scene tracker predate older saves — backfill empties so the engine
+  // and UI can rely on them; they fill in as the player keeps playing. (Pre-revision
+  // saves carry obsolete summary/summaryTurn/turnsRecorded keys; those are ignored,
+  // and the per-day fields are backfilled below.)
+  const day = state.world?.day ?? 1;
+  const j = state.journal as unknown as Record<string, unknown> | undefined;
+  if (!j || typeof j !== "object") {
+    state.journal = { places: [], people: [], days: [], currentDay: day, dayLog: "" };
+  } else {
+    if (!Array.isArray(j.places)) j.places = [];
+    if (!Array.isArray(j.people)) j.people = [];
+    if (!Array.isArray(j.days)) j.days = [];
+    if (typeof j.currentDay !== "number") j.currentDay = day;
+    if (typeof j.dayLog !== "string") j.dayLog = "";
+  }
+  if (state.world && !Array.isArray(state.world.npcsPresent)) {
+    state.world.npcsPresent = [];
+  }
+
   return state;
 }
