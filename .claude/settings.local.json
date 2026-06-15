@@ -18,7 +18,9 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\\\\client\\\\src\" -Recurse -File)",
       "Bash(Select-Object -First 30)",
       "Bash(Format-Table Name, FullName)",
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\\\\shared\" -Filter \"*.ts\" -Recurse)"
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\\\\shared\" -Filter \"*.ts\" -Recurse)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\" -Recurse -Depth 3)",
+      "Bash(xargs wc -l)"
     ]
   }
 }
