@@ -12,7 +12,9 @@
       "Bash(Select-Object FullName)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\" -Recurse -File)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\\\\server\\\\src\" -Filter \"*.ts\")",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\" -Recurse -Depth 2)",
+      "Bash(Select-Object -Property FullName)"
     ]
   }
 }
