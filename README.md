@@ -76,6 +76,17 @@ Stop by closing that window (or Ctrl+C). See **Run it** for the terminal equival
   *you-are-here* marker on the world / Rome images, and a deterministic, seeded
   **ASCII** local map (`server/src/mapGen.ts`) is themed by the kind of place
   you're in and grows in chunks as the story moves you around.
+- **A Journal that writes itself.** A **📖 Journal** button opens a log the engine
+  keeps for you: every **place you visit** and every **named NPC you meet** — with
+  where and when you first crossed paths — recorded deterministically from state the
+  engine already owns (`recordScene` in `server/src/turn.ts`), so the AI only *names*
+  people and places and never decides what's logged. Your journey is chronicled **one
+  short paragraph per in-game day**, written by the model when the day turns and stored
+  for good (`recordDay` in `server/src/journal.ts`) — so the Journal opens instantly,
+  with no waiting. The day in progress shows a one-line *state of affairs*, and you page
+  back through earlier days with arrows. A sidebar **In this scene** panel tracks who is
+  present with you right now. (NPC presence is the model's best effort, like the map —
+  advisory color, never a mechanical gate.)
 
 ## Prerequisites
 
@@ -167,6 +178,7 @@ server/src/
   gm.ts              The GM engine: three-stage turn (checks → effects → narration)
   gameState.ts       Archetype presets (kit/hook) + character/state factory
   history.ts         Narrative windowing + summarization
+  journal.ts         Per-day journal recap, written at day's end (places/NPCs are in turn.ts)
   mapGen.ts          Deterministic, seeded ASCII chunk generation (per-theme)
   mapEngine.ts       Derives world/local map state from the location each turn
   persistence.ts     JSON save files (+ migration of older saves on load)
@@ -176,6 +188,8 @@ client/src/          Vite + React + Tailwind UI
     CharacterCreation.tsx  Creation flow: identity, SPECIAL allocator, abilities
     CharacterSheet.tsx     In-game sheet (wax-tablet modal): identity, vitals/XP, combat, attributes, equip
     StatsPanel.tsx   In-game sidebar panel (HP, gold, armor, carry, the seven attributes, traits)
+    ScenePanel.tsx   In-game sidebar panel: the NPCs present in the scene right now
+    Journal.tsx      Journal modal: per-day recaps (arrow navigation), places visited, people met
     LocalMap.tsx     Persistent ASCII minimap panel
     MapOverlay.tsx   World/Rome image map with you-are-here marker + zoom
 ```

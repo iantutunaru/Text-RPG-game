@@ -86,6 +86,54 @@ export interface World {
   day: number;
   timeOfDay: TimeOfDay;
   flags: Record<string, string | number | boolean>;
+  // Named NPCs the GM reports as physically present this turn. Best-effort and
+  // advisory (the model proposes it; the engine just records it), like the
+  // derived map — never a mechanical gate. Replaced each turn, so an NPC leaving
+  // simply drops off the list. Optional on pre-feature saves.
+  npcsPresent?: ScenePresence[];
+}
+
+// ---- Journal ----
+
+// One NPC the GM reports as present in the current scene.
+export interface ScenePresence {
+  name: string;
+  note?: string; // brief descriptor, e.g. "the lanista", "a fishmonger"
+}
+
+// A journal record of an NPC the player has met (logged once, never removed).
+export interface MetNpc {
+  name: string;
+  note?: string;
+  firstSeenLocation: string;
+  day: number; // game day first met
+}
+
+// A journal record of a location the player has visited (deduped by name).
+export interface VisitedPlace {
+  name: string;
+  day: number; // game day first visited
+  timeOfDay: TimeOfDay;
+}
+
+// One finished day's recap — a short paragraph written when the in-game day
+// ended (see server/src/journal.ts:recordDay). Immutable once recorded.
+export interface DayRecap {
+  day: number;
+  recap: string;
+}
+
+// Auto-maintained chronicle of the playthrough. Places and people are recorded
+// deterministically each turn by the engine (see server/src/turn.ts:recordScene).
+// The journey is logged one paragraph PER IN-GAME DAY: each day's events accumulate
+// in `dayLog`, and when the day advances the engine writes a recap into `days` once
+// (cached forever — a finished day never changes), so the Journal opens instantly.
+export interface Journal {
+  places: VisitedPlace[];
+  people: MetNpc[];
+  days: DayRecap[]; // finished-day recaps, in order (immutable; never regenerated)
+  currentDay: number; // the in-game day currently being accumulated
+  dayLog: string; // working buffer: this day's turn text (capped), source for its recap
 }
 
 // ---- Maps ----
@@ -153,6 +201,7 @@ export interface GameState {
   storySoFar: string; // rolling summary of events that scrolled out of the window
   lastChoices?: string[]; // choices offered on the most recent turn (for resume)
   map?: MapState; // derived world/local map state (optional on pre-feature saves)
+  journal?: Journal; // visited places, NPCs met, chronicle (optional on old saves)
 }
 
 // ---- Dice / checks ----

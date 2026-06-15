@@ -3,9 +3,11 @@ import type { EquipIntent, GameState, RollResult } from "@shared";
 import NarrativeLog from "./NarrativeLog";
 import StatsPanel from "./StatsPanel";
 import InventoryPanel from "./InventoryPanel";
+import ScenePanel from "./ScenePanel";
 import LocalMap from "./LocalMap";
 import MapOverlay from "./MapOverlay";
 import CharacterSheet from "./CharacterSheet";
+import Journal from "./Journal";
 import ChoiceButtons from "./ChoiceButtons";
 import ActionInput from "./ActionInput";
 
@@ -35,6 +37,7 @@ export default function GameScreen({
   const ended = state.status === "ended";
   const [mapOpen, setMapOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [journalOpen, setJournalOpen] = useState(false);
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col px-4 py-4">
@@ -48,6 +51,12 @@ export default function GameScreen({
             className="rounded-md border border-stone-700 px-3 py-1.5 text-sm text-stone-300 transition hover:border-[var(--color-gold)]"
           >
             📜 Character
+          </button>
+          <button
+            onClick={() => setJournalOpen(true)}
+            className="rounded-md border border-stone-700 px-3 py-1.5 text-sm text-stone-300 transition hover:border-[var(--color-gold)]"
+          >
+            📖 Journal
           </button>
           <button
             onClick={() => setMapOpen(true)}
@@ -117,6 +126,7 @@ export default function GameScreen({
             world={state.world}
             items={state.inventory}
           />
+          <ScenePanel npcs={state.world.npcsPresent ?? []} />
           <LocalMap map={state.map} />
           <InventoryPanel items={state.inventory} />
         </aside>
@@ -131,6 +141,11 @@ export default function GameScreen({
         ended={ended}
         onAction={onAction}
         onClose={() => setSheetOpen(false)}
+      />
+      <Journal
+        open={journalOpen}
+        state={state}
+        onClose={() => setJournalOpen(false)}
       />
     </div>
   );

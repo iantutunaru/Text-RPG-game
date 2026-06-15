@@ -173,6 +173,7 @@ export function createGame(input: CreateGameInput): GameState {
     day: 1,
     timeOfDay: "dawn",
     flags: {},
+    npcsPresent: [],
   };
 
   return {
@@ -185,6 +186,7 @@ export function createGame(input: CreateGameInput): GameState {
     world,
     transcript: [],
     storySoFar: "",
+    journal: { places: [], people: [], days: [], currentDay: 1, dayLog: "" },
   };
 }
 

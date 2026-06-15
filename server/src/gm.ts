@@ -23,8 +23,10 @@ import {
   newEffects,
   parseJSON,
   readCommitment,
+  recordScene,
 } from "./turn.js";
 import { recordTurn } from "./history.js";
+import { recordDay } from "./journal.js";
 import { updateMap } from "./mapEngine.js";
 import { saveGame } from "./persistence.js";
 
@@ -115,13 +117,15 @@ export async function runTurn(
         content:
           "STAGE B. Given the action and the dice results, output the mechanical effects (stat deltas, item changes, scene changes), the choices, and whether the game ends. Make consequences match the dice — failure should cost something." +
           agencyNote +
-          " For `choices`, give 3-4 SHORT imperative next actions of about 3-8 words each (e.g. \"Press the attack\", \"Loot the body\", \"Call for the lanista\") — not full sentences. Each choice is an object with a `label`. When a choice only makes sense in a particular state, add a `requires` so the engine can hide it otherwise — ONLY when it genuinely applies: `unequip` (item that must be currently equipped, e.g. \"Sheathe your gladius\"), `equip` (item held but not yet worn, e.g. \"Draw your gladius\"), `hasItem` (item that must be in the inventory to use/give/drop), `gold` (minimum sestertii needed, e.g. 4 for \"Buy bread (4 sst)\"), or `flag` ({key, equals}) to gate on a scene fact. Omit `requires` for plain choices. Use `setFlags` (key/value pairs, e.g. door_open=true) to record durable scene facts you may gate later choices on. Respond as JSON only.",
+          " For `choices`, give 3-4 SHORT imperative next actions of about 3-8 words each (e.g. \"Press the attack\", \"Loot the body\", \"Call for the lanista\") — not full sentences. Each choice is an object with a `label`. When a choice only makes sense in a particular state, add a `requires` so the engine can hide it otherwise — ONLY when it genuinely applies: `unequip` (item that must be currently equipped, e.g. \"Sheathe your gladius\"), `equip` (item held but not yet worn, e.g. \"Draw your gladius\"), `hasItem` (item that must be in the inventory to use/give/drop), `gold` (minimum sestertii needed, e.g. 4 for \"Buy bread (4 sst)\"), or `flag` ({key, equals}) to gate on a scene fact. Omit `requires` for plain choices. Use `setFlags` (key/value pairs, e.g. door_open=true) to record durable scene facts you may gate later choices on. Use `npcsPresent` to list the named NPCs physically present with the player at the END of this turn — each an object with a `name` and a short `note` (their role or manner, e.g. {\"name\":\"Gaius\",\"note\":\"the lanista\"}); leave it empty if the player is alone. Respond as JSON only.",
       },
     ],
     format: RESOLVE_SCHEMA,
     temperature: 0.5,
   });
-  applyResolution(state, parseJSON(resolveResp.content), effects, commitment);
+  const resolved = parseJSON(resolveResp.content);
+  applyResolution(state, resolved, effects, commitment);
+  recordScene(state, resolved); // log journal places/people + who's present now
   updateMap(state); // derive world/local map from the (possibly new) location
 
   const effectsSummary = summarizeEffects(state, effects);
@@ -153,6 +157,7 @@ export async function runTurn(
 
   state.lastChoices = choices;
   await recordTurn(state, { action: playerAction, narrative }, llm);
+  await recordDay(state, playerAction, narrative, llm); // per-day journal recap at day's end
   await saveGame(state);
 
   return { state, narrative, choices, rolls: effects.rolls };
