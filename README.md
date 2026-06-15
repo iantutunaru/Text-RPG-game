@@ -54,7 +54,14 @@ Stop by closing that window (or Ctrl+C). See **Run it** for the terminal equival
   narration at your next decision. Only when your words actually commit (buy, pay,
   attack…) does a transaction occur — and then anything you pay for is added to your
   inventory. This guard is enforced in code (`applyResolution` in `server/src/turn.ts`),
-  so the AI can't railroad you even if it tries.
+  so the AI can't railroad you even if it tries. And the *choices* it offers are held
+  to the same standard: every proposed next action is checked against your real state —
+  your equipped gear, your purse, what's in your pack, and facts the engine has recorded
+  about the scene — and any that contradict it are quietly dropped. You'll never be asked
+  to sheathe a sword you already stowed, buy what you can't afford, or use what you aren't
+  carrying. To make this possible the model tags each choice with the state it depends on,
+  and the engine — not the model — decides whether that condition holds (`coherentChoices`,
+  also in `server/src/turn.ts`).
 - **Inventory, equipment, and a character sheet.** A **📜 Character** button opens a
   full wax-tablet sheet — your identity and backstory, vitals and XP, attributes,
   traits, and gear. Items carry weight and equip slots, derived in code from a curated

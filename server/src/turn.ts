@@ -19,6 +19,7 @@ import {
   carryWeight,
   effectiveAttributes,
   equippedInSlot,
+  isEquippable,
   maxCarry,
   resolveItem,
   weaponDamageOf,
@@ -99,7 +100,52 @@ export const RESOLVE_SCHEMA = {
     location: { type: "string" },
     dayDelta: { type: "integer" },
     timeOfDay: { type: "string", enum: TIMES },
-    choices: { type: "array", items: { type: "string" } },
+    // Each choice is the short imperative `label` shown to the player, plus an
+    // OPTIONAL `requires` declaring the state it depends on. The engine validates
+    // every declared precondition against the truth it owns and DROPS choices that
+    // contradict it (see `coherentChoices`), so the GM can't offer impossible
+    // actions (sheathe an already-stowed sword, buy with coin you lack, …).
+    choices: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          label: { type: "string" },
+          requires: {
+            type: "object",
+            properties: {
+              equip: { type: "string" }, // item held but NOT yet equipped
+              unequip: { type: "string" }, // item that must currently be equipped
+              hasItem: { type: "string" }, // item that must be in inventory
+              gold: { type: "integer" }, // minimum sestertii the player must hold
+              flag: {
+                type: "object",
+                properties: {
+                  key: { type: "string" },
+                  equals: { type: "string" },
+                },
+                required: ["key", "equals"],
+              },
+            },
+          },
+        },
+        required: ["label"],
+      },
+    },
+    // Durable scene facts to record for later choice-gating (e.g. door_open=true).
+    // Array-of-pairs (not an open-ended object) so the JSON-schema grammar stays
+    // simple on small models; values are strings, compared stringified.
+    setFlags: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          key: { type: "string" },
+          value: { type: "string" },
+        },
+        required: ["key", "value"],
+      },
+    },
     gameOver: { type: "boolean" },
     endingOutcome: { type: "string" },
     endingEpitaph: { type: "string" },
@@ -166,6 +212,102 @@ export function applyChecks(
   return `Dice results (these are final — narrate consequences to match):\n${lines.join(
     "\n"
   )}`;
+}
+
+// --- Choice coherence guard --------------------------------------------------
+// Stage-B choices are model text, but the ENGINE owns inventory/gold/scene truth.
+// A choice may declare the state it depends on (`requires`); we validate every
+// declared precondition and DROP choices that contradict the current state, so the
+// player is never offered an impossible action (sheathe an already-stowed sword,
+// buy with coin they lack, use an item they don't hold). Choices with no `requires`
+// are always kept — fail-open, including legacy bare-string choices.
+
+interface ChoiceRequires {
+  equip?: string; // item held but NOT yet equipped
+  unequip?: string; // item that must currently be equipped
+  hasItem?: string; // item that must be in inventory
+  gold?: number; // minimum sestertii the player must hold
+  flag?: { key: string; equals: string }; // a recorded scene fact
+}
+
+const LEADING_ARTICLE = /^(?:the|your|my|a|an)\s+/i;
+
+function normalizeItemName(name: string): string {
+  return name.trim().toLowerCase().replace(LEADING_ARTICLE, "").trim();
+}
+
+/** Match a model-named item against the inventory: normalized exact match first,
+ *  then a loose contains match (so `unequip: "lorica"` finds an equipped
+ *  "Lorica hamata"). Mirrors the forgiving spirit of `resolveItem`. */
+function findInventoryItem(inventory: Item[], name: string): Item | undefined {
+  const n = normalizeItemName(name);
+  if (!n) return undefined;
+  const exact = inventory.find((i) => normalizeItemName(i.name) === n);
+  if (exact) return exact;
+  return inventory.find((i) => {
+    const m = normalizeItemName(i.name);
+    return m.includes(n) || n.includes(m);
+  });
+}
+
+/** Does the current state satisfy every precondition a choice declared? */
+function requiresMet(state: GameState, req: ChoiceRequires): boolean {
+  const inv = state.inventory;
+  if (typeof req.equip === "string" && req.equip.trim()) {
+    const it = findInventoryItem(inv, req.equip);
+    // Can only equip an item you hold, that is equippable and not already worn.
+    if (!it || it.equipped === true || !isEquippable(it.name)) return false;
+  }
+  if (typeof req.unequip === "string" && req.unequip.trim()) {
+    const it = findInventoryItem(inv, req.unequip);
+    if (!it || it.equipped !== true) return false; // must currently be equipped
+  }
+  if (typeof req.hasItem === "string" && req.hasItem.trim()) {
+    if (!findInventoryItem(inv, req.hasItem)) return false;
+  }
+  if (req.gold != null) {
+    if (state.character.gold < toNum(req.gold)) return false;
+  }
+  if (req.flag && typeof req.flag.key === "string" && req.flag.key.trim()) {
+    const flags = state.world.flags ?? {};
+    const key = req.flag.key.trim();
+    // Only act on a flag the engine has actually recorded; an unknown key is
+    // fail-open, since the model's flag keys can drift between turns.
+    if (key in flags && String(flags[key]) !== String(req.flag.equals)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Validate the Stage-B `choices` against engine-owned state and return the
+ *  surviving label strings (deduped, capped at 4). The rest of the pipeline stays
+ *  string-based, so this is the only place that understands the structured shape. */
+export function coherentChoices(state: GameState, raw: unknown): string[] {
+  const arr = Array.isArray(raw) ? raw : [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const el of arr) {
+    let label = "";
+    let requires: ChoiceRequires | undefined;
+    if (typeof el === "string") {
+      label = el.trim();
+    } else if (el && typeof el === "object") {
+      const o = el as Record<string, unknown>;
+      label = String(o.label ?? "").trim();
+      if (o.requires && typeof o.requires === "object") {
+        requires = o.requires as ChoiceRequires;
+      }
+    }
+    if (!label) continue;
+    if (requires && !requiresMet(state, requires)) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(label);
+    if (out.length >= 4) break;
+  }
+  return out;
 }
 
 /** Apply the parsed Stage-B resolution to the game state.
@@ -265,12 +407,24 @@ export function applyResolution(
     state.world.timeOfDay = res.timeOfDay as TimeOfDay;
   }
 
-  // Choices.
-  const rawChoices = Array.isArray(res.choices) ? res.choices : [];
-  const choices = rawChoices
-    .map((x) => String(x).trim())
-    .filter(Boolean)
-    .slice(0, 4);
+  // Durable scene flags the GM records so later choices can be gated on them
+  // (e.g. door_open=true). Stored stringified and capped, so a noisy model can't
+  // bloat the save. (`??=` also heals older saves that predate the flags field.)
+  if (Array.isArray(res.setFlags)) {
+    const flags = (state.world.flags ??= {});
+    for (const raw of res.setFlags) {
+      if (!raw || typeof raw !== "object") continue;
+      const f = raw as Record<string, unknown>;
+      const key = String(f.key ?? "").trim().slice(0, 40);
+      if (!key) continue;
+      if (!(key in flags) && Object.keys(flags).length >= 16) continue;
+      flags[key] = String(f.value ?? "").slice(0, 80);
+    }
+  }
+
+  // Choices — drop any the engine's own state contradicts (impossible actions).
+  // An empty result leaves effects.choices null, so gm.ts falls back (no soft-lock).
+  const choices = coherentChoices(state, res.choices);
   if (choices.length) effects.choices = choices;
 
   // Ending — also force an ending if HP hit 0.
