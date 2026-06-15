@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet --version)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "PowerShell($os = Get-CimInstance Win32_OperatingSystem; $cpu = Get-CimInstance Win32_Processor; $gpu = Get-CimInstance Win32_VideoController; \"RAM_GB: {0:N1}\" -f \\($os.TotalVisibleMemorySize/1MB\\); \"CPU: $\\($cpu.Name\\)\"; foreach \\($g in $gpu\\) { \"GPU: $\\($g.Name\\) | VRAM_GB: {0:N1}\" -f \\($g.AdapterRAM/1GB\\) })",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\" -Recurse -Directory)",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\" -Recurse -File)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\\\\server\\\\src\" -Filter \"*.ts\")",
+      "Bash(Select-Object Name)"
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Cinzel", serif;
+  --font-body: "EB Garamond", Georgia, serif;
+  --color-parchment: #ece3cf;
+  --color-ink: #2b2118;
+  --color-stone-900: #1a1714;
+  --color-stone-800: #241f1a;
+  --color-stone-700: #322a22;
+  --color-terracotta: #b5532a;
+  --color-gold: #c9a44c;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 50% -10%, #3a3128 0%, transparent 60%),
+    #1a1714;
+  color: var(--color-parchment);
+  font-family: var(--font-body);
+}
+
+/* Subtle scrollbar to match the dark theme */
+*::-webkit-scrollbar {
+  width: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #4a3f33;
+  border-radius: 5px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

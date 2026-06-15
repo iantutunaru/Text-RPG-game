@@ -1,0 +1,20 @@
+{
+  "name": "roma-text-rpg",
+  "private": true,
+  "version": "0.1.0",
+  "description": "An AI-powered text RPG set in ancient Rome, powered by a local Ollama model.",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm -w server run dev",
+    "dev:client": "npm -w client run dev",
+    "build": "npm -w client run build",
+    "start": "npm -w server run start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
