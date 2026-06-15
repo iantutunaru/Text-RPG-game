@@ -5,7 +5,11 @@ import express from "express";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { NewGameRequest, ServerEvent } from "../../shared/types.js";
+import type {
+  EquipIntent,
+  NewGameRequest,
+  ServerEvent,
+} from "../../shared/types.js";
 import {
   MAX_ABILITIES,
   isCuratedAbility,
@@ -144,6 +148,20 @@ app.post("/api/game/:id/action", async (req, res) => {
     return res.status(409).json({ error: "This game has already ended." });
   }
 
+  // Optional equip/unequip intent — applied deterministically inside runTurn,
+  // then narrated as a normal turn (so it costs a turn; see gm.ts / turn.ts).
+  let intent: EquipIntent | undefined;
+  const rawIntent = req.body?.intent;
+  if (rawIntent && typeof rawIntent === "object") {
+    const type = (rawIntent as { type?: unknown }).type;
+    const item = String((rawIntent as { item?: unknown }).item ?? "")
+      .trim()
+      .slice(0, 80);
+    if ((type === "equip" || type === "unequip") && item) {
+      intent = { type, item };
+    }
+  }
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -154,10 +172,16 @@ app.post("/api/game/:id/action", async (req, res) => {
   };
 
   try {
-    const result = await runTurn(state, action, llm, {
-      onToken: (text) => send({ type: "token", text }),
-      onRoll: (roll) => send({ type: "roll", roll }),
-    });
+    const result = await runTurn(
+      state,
+      action,
+      llm,
+      {
+        onToken: (text) => send({ type: "token", text }),
+        onRoll: (roll) => send({ type: "roll", roll }),
+      },
+      intent
+    );
     send({ type: "done", result });
   } catch (err) {
     console.error("Turn failed:", err);

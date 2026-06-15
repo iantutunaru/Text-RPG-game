@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { GameState, NewGameRequest, RollResult } from "@shared";
+import type { EquipIntent, GameState, NewGameRequest, RollResult } from "@shared";
 import * as api from "./api";
 import CharacterCreation from "./components/CharacterCreation";
 import GameScreen from "./components/GameScreen";
@@ -49,7 +49,7 @@ export default function App() {
     }
   }
 
-  async function takeAction(action: string) {
+  async function takeAction(action: string, intent?: EquipIntent) {
     if (!state || busy) return;
     setBusy(true);
     setError(null);
@@ -61,7 +61,7 @@ export default function App() {
     let live = "";
     const rolls: RollResult[] = [];
     try {
-      for await (const ev of api.streamAction(state.id, action)) {
+      for await (const ev of api.streamAction(state.id, action, intent)) {
         if (ev.type === "token") {
           live += ev.text;
           setStreaming(live);

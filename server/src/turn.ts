@@ -7,12 +7,22 @@
 
 import type {
   AttributeKey,
+  EquipIntent,
   GameState,
   Item,
   RollResult,
   TimeOfDay,
 } from "../../shared/types.js";
 import { ATTRIBUTE_KEYS } from "../../shared/special.js";
+import {
+  armorOf,
+  carryWeight,
+  effectiveAttributes,
+  equippedInSlot,
+  maxCarry,
+  resolveItem,
+  weaponDamageOf,
+} from "../../shared/items.js";
 import { clamp, toNum } from "./gameState.js";
 const TIMES: TimeOfDay[] = [
   "dawn",
@@ -101,10 +111,11 @@ export interface TurnEffects {
   rolls: RollResult[];
   choices: string[] | null;
   ended: boolean;
+  encumbered: string[]; // items refused because they'd exceed carry capacity
 }
 
 export function newEffects(): TurnEffects {
-  return { rolls: [], choices: null, ended: false };
+  return { rolls: [], choices: null, ended: false, encumbered: [] };
 }
 
 function d20(): number {
@@ -120,6 +131,8 @@ export function applyChecks(
   const checks = Array.isArray(rawChecks) ? rawChecks : [];
   if (checks.length === 0) return "No checks were required for this action.";
 
+  // Equipped gear can shift attributes; roll against the EFFECTIVE values.
+  const eff = effectiveAttributes(state.character.attributes, state.inventory);
   const lines: string[] = [];
   for (const raw of checks) {
     if (!raw || typeof raw !== "object") continue;
@@ -130,7 +143,7 @@ export function applyChecks(
     const difficulty = clamp(toNum(c.difficulty, 12), 5, 30);
     const reason = String(c.reason ?? "an uncertain action");
     const roll = d20();
-    const modifier = state.character.attributes[attribute];
+    const modifier = eff[attribute];
     const total = roll + modifier;
     const success = total >= difficulty;
     const result: RollResult = {
@@ -174,7 +187,18 @@ export function applyResolution(
   const exploratory = commitment === "exploratory";
 
   // Vital stats (clamped). On exploratory turns, gold can't be spent.
-  c.hp = clamp(c.hp + toNum(res.hpDelta), 0, c.maxHp);
+  // Incoming damage is softened by equipped armor — but a real hit always
+  // stings (≥1), so armor protects without granting invincibility.
+  const rawHp = toNum(res.hpDelta);
+  let hpDelta = rawHp;
+  if (rawHp < 0) {
+    const taken = Math.max(1, -rawHp - armorOf(state.inventory));
+    hpDelta = -taken;
+  }
+  c.hp = clamp(c.hp + hpDelta, 0, c.maxHp);
+  // TODO(enemy-hp): once an enemy combatant model exists, subtract
+  // resolveAttackDamage(state) from the target's HP here. For now the player's
+  // weapon damage only informs narration — there is no entity to apply it to.
   const goldDelta = exploratory ? Math.max(0, toNum(res.goldDelta)) : toNum(res.goldDelta);
   c.gold = Math.max(0, c.gold + goldDelta);
   c.reputation = clamp(c.reputation + toNum(res.reputationDelta), -100, 100);
@@ -187,12 +211,22 @@ export function applyResolution(
 
   // Inventory — suppressed entirely on exploratory turns (no buying/looting/giving).
   const add = exploratory || !Array.isArray(res.addItems) ? [] : res.addItems;
+  const carryCap = maxCarry(c.attributes.strength);
+  let load = carryWeight(state.inventory);
   for (const raw of add) {
     if (!raw || typeof raw !== "object") continue;
     const item = raw as Record<string, unknown>;
     const name = String(item.name ?? "").trim();
     if (!name) continue;
     const qty = Math.max(1, toNum(item.qty, 1));
+    // Encumbrance: refuse pickups that would exceed carrying capacity. The
+    // refused name is surfaced so the narration can say it's too heavy to carry.
+    const addedWeight = resolveItem(name).weight * qty;
+    if (load + addedWeight > carryCap) {
+      effects.encumbered.push(name);
+      continue;
+    }
+    load += addedWeight;
     const existing = state.inventory.find(
       (i) => i.name.toLowerCase() === name.toLowerCase()
     );
@@ -253,6 +287,36 @@ export function applyResolution(
     };
     effects.ended = true;
   }
+}
+
+/** Attack damage the player would deal this turn (equipped weapon, or unarmed).
+ *
+ *  PLACEHOLDER for the upcoming enemy-HP combat model. Today there is no enemy
+ *  entity to apply it to, so this value only informs narration; the function and
+ *  its future call site (see the `TODO(enemy-hp)` marker in `applyResolution`)
+ *  exist so that wiring real combat later is additive, not a refactor. */
+export function resolveAttackDamage(state: GameState): number {
+  return weaponDamageOf(state.inventory);
+}
+
+/** Apply a player's equip/unequip request deterministically — the engine owns the
+ *  change; the GM merely narrates it (see `runTurn`), so equipping costs a turn and
+ *  can't be abused mid-battle. Enforces one item per slot. */
+export function applyEquip(state: GameState, intent: EquipIntent): void {
+  const key = intent.item.trim().toLowerCase();
+  if (!key) return;
+  const item = state.inventory.find((i) => i.name.toLowerCase() === key);
+  if (!item) return;
+  if (intent.type === "unequip") {
+    item.equipped = false;
+    return;
+  }
+  // Equip: the item must map to a slot; vacate that slot first (one per slot).
+  const slot = resolveItem(item.name).slot;
+  if (!slot) return;
+  const current = equippedInSlot(state.inventory, slot);
+  if (current && current !== item) current.equipped = false;
+  item.equipped = true;
 }
 
 /** Forgiving JSON parse for model output (handles stray prose/code fences). */

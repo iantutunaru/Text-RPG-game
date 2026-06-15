@@ -1,9 +1,11 @@
-import type { Character, World } from "@shared";
+import type { Character, Item, World } from "@shared";
 import { ATTRIBUTE_KEYS, SPECIAL } from "../../../shared/special";
+import { armorOf, carryWeight, maxCarry } from "../../../shared/items";
 
 interface Props {
   character: Character;
   world: World;
+  items: Item[];
 }
 
 function Bar({ value, max }: { value: number; max: number }) {
@@ -39,10 +41,11 @@ function Attr({
   );
 }
 
-export default function StatsPanel({ character: c, world }: Props) {
+export default function StatsPanel({ character: c, world, items }: Props) {
   const identity = [c.age ? `Age ${c.age}` : null, c.ancestry]
     .filter(Boolean)
     .join(" · ");
+  const cap = maxCarry(c.attributes.strength);
 
   return (
     <div className="rounded-lg border border-stone-700 bg-stone-900/60 p-4">
@@ -71,6 +74,13 @@ export default function StatsPanel({ character: c, world }: Props) {
           🪙 {c.gold} <span className="text-stone-500">sestertii</span>
         </span>
         <span className="text-stone-300">Rep {c.reputation}</span>
+      </div>
+
+      <div className="mt-1 flex justify-between text-sm text-stone-300">
+        <span>🛡 Armor {armorOf(items)}</span>
+        <span title="Carried weight / capacity (from Vires)">
+          ⚖ {carryWeight(items)}/{cap}
+        </span>
       </div>
 
       <div className="mt-4 grid grid-cols-4 gap-2">

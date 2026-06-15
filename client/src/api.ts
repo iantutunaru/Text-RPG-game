@@ -2,6 +2,7 @@
 // the streaming action endpoint.
 
 import type {
+  EquipIntent,
   GameState,
   NewGameRequest,
   RollResult,
@@ -45,15 +46,17 @@ export async function loadGame(id: string): Promise<GameState> {
   return res.json();
 }
 
-/** Stream a turn. Yields server events as they arrive. */
+/** Stream a turn. Yields server events as they arrive. An optional equip/unequip
+ *  intent is applied by the engine and narrated as part of the turn. */
 export async function* streamAction(
   id: string,
-  action: string
+  action: string,
+  intent?: EquipIntent
 ): AsyncGenerator<ServerEvent> {
   const res = await fetch(`/api/game/${id}/action`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action }),
+    body: JSON.stringify(intent ? { action, intent } : { action }),
   });
   if (!res.ok || !res.body) return asError(res);
 

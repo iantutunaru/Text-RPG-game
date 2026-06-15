@@ -18,6 +18,9 @@ export default function InventoryPanel({ items }: { items: Item[] }) {
               {it.qty > 1 && (
                 <span className="text-stone-400"> ×{it.qty}</span>
               )}
+              {it.equipped && (
+                <span className="text-xs text-[var(--color-gold)]"> · worn</span>
+              )}
               {it.description && (
                 <span className="block text-xs text-stone-500">
                   {it.description}

@@ -1,10 +1,11 @@
 import { useState } from "react";
-import type { GameState, RollResult } from "@shared";
+import type { EquipIntent, GameState, RollResult } from "@shared";
 import NarrativeLog from "./NarrativeLog";
 import StatsPanel from "./StatsPanel";
 import InventoryPanel from "./InventoryPanel";
 import LocalMap from "./LocalMap";
 import MapOverlay from "./MapOverlay";
+import CharacterSheet from "./CharacterSheet";
 import ChoiceButtons from "./ChoiceButtons";
 import ActionInput from "./ActionInput";
 
@@ -16,7 +17,7 @@ interface Props {
   liveRolls: RollResult[];
   busy: boolean;
   error: string | null;
-  onAction: (action: string) => void;
+  onAction: (action: string, intent?: EquipIntent) => void;
   onNewGame: () => void;
 }
 
@@ -33,6 +34,7 @@ export default function GameScreen({
 }: Props) {
   const ended = state.status === "ended";
   const [mapOpen, setMapOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col px-4 py-4">
@@ -40,7 +42,13 @@ export default function GameScreen({
         <h1 className="font-display text-2xl tracking-widest text-[var(--color-gold)]">
           ROMA
         </h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            onClick={() => setSheetOpen(true)}
+            className="rounded-md border border-stone-700 px-3 py-1.5 text-sm text-stone-300 transition hover:border-[var(--color-gold)]"
+          >
+            📜 Character
+          </button>
           <button
             onClick={() => setMapOpen(true)}
             className="rounded-md border border-stone-700 px-3 py-1.5 text-sm text-stone-300 transition hover:border-[var(--color-gold)]"
@@ -104,13 +112,26 @@ export default function GameScreen({
 
         {/* Sidebar */}
         <aside className="flex flex-col gap-4 overflow-y-auto">
-          <StatsPanel character={state.character} world={state.world} />
+          <StatsPanel
+            character={state.character}
+            world={state.world}
+            items={state.inventory}
+          />
           <LocalMap map={state.map} />
           <InventoryPanel items={state.inventory} />
         </aside>
       </div>
 
       <MapOverlay open={mapOpen} map={state.map} onClose={() => setMapOpen(false)} />
+      <CharacterSheet
+        open={sheetOpen}
+        character={state.character}
+        items={state.inventory}
+        busy={busy}
+        ended={ended}
+        onAction={onAction}
+        onClose={() => setSheetOpen(false)}
+      />
     </div>
   );
 }

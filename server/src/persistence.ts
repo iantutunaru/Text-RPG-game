@@ -85,5 +85,13 @@ function normalizeState(state: GameState): GameState {
   }
   if (typeof c.hp !== "number") c.hp = c.maxHp;
 
+  // Inventory items predating the equipment system have no `equipped` flag.
+  if (Array.isArray(state.inventory)) {
+    for (const it of state.inventory) {
+      const item = it as { equipped?: unknown };
+      if (typeof item.equipped !== "boolean") item.equipped = false;
+    }
+  }
+
   return state;
 }

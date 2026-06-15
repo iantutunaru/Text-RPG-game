@@ -7,7 +7,9 @@ distribute Rome-flavored SPECIAL attributes, and choose special abilities, then
 play out a story in the late Roman Republic. Stats, dice rolls, inventory, and combat are
 all tracked deterministically in code — the AI narrates and *proposes* mechanical
 effects in forced-JSON stages while the engine owns every dice roll and stat
-change, so the numbers stay honest.
+change, so the numbers stay honest. Open a full **character sheet** any time to review
+your tale and manage **equipment** — arms and armor the engine folds into your
+attributes, your defense, and how much you can carry.
 
 **Runs entirely on your machine. $0 — no API keys, no cloud, no metering.**
 
@@ -53,6 +55,15 @@ Stop by closing that window (or Ctrl+C). See **Run it** for the terminal equival
   attack…) does a transaction occur — and then anything you pay for is added to your
   inventory. This guard is enforced in code (`applyResolution` in `server/src/turn.ts`),
   so the AI can't railroad you even if it tries.
+- **Inventory, equipment, and a character sheet.** A **📜 Character** button opens a
+  full wax-tablet sheet — your identity and backstory, vitals and XP, attributes,
+  traits, and gear. Items carry weight and equip slots, derived in code from a curated
+  catalog (`shared/items.ts`) with a keyword fallback for anything the AI invents —
+  so the model can *name* items but never sets their stats. Equipping a weapon or armor
+  feeds your **effective attributes**, your **Armor** (which softens incoming wounds),
+  and your **Weapon damage**, while a Vires-based **carry limit** caps what you can haul.
+  Equipping is itself a narrated action that costs a turn, so you can't silently re-arm
+  in the middle of a fight.
 - **Maps are derived from the story, not authored by the AI.** Your free-form
   location is matched to a known landmark (`shared/mapData.ts`) to drop a
   *you-are-here* marker on the world / Rome images, and a deterministic, seeded
@@ -140,6 +151,7 @@ Shortcuts so the next session (human or AI) can get productive quickly:
 shared/
   types.ts           Types shared by client and server
   special.ts         SPECIAL attributes (Roman names), abilities, balance + validation
+  items.ts           Item catalog + keyword fallback → equip slots, weight, armor, damage, carry
   mapData.ts         Map landmark anchors (image coords) + location→anchor matcher
 server/src/
   llm.ts             LLMClient interface + Ollama implementation
@@ -154,8 +166,9 @@ server/src/
   index.ts           Express server + SSE
 client/src/          Vite + React + Tailwind UI
   components/
-    CharacterCreation.tsx  Character sheet: identity, SPECIAL allocator, abilities
-    StatsPanel.tsx   In-game character panel (HP, gold, the seven attributes, traits)
+    CharacterCreation.tsx  Creation flow: identity, SPECIAL allocator, abilities
+    CharacterSheet.tsx     In-game sheet (wax-tablet modal): identity, vitals/XP, combat, attributes, equip
+    StatsPanel.tsx   In-game sidebar panel (HP, gold, armor, carry, the seven attributes, traits)
     LocalMap.tsx     Persistent ASCII minimap panel
     MapOverlay.tsx   World/Rome image map with you-are-here marker + zoom
 ```

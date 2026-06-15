@@ -10,6 +10,7 @@ import {
   STAT_MAX,
   STAT_MIN,
   archetypeBaseline,
+  formatEffects,
   statTotal,
 } from "../../../shared/special";
 
@@ -68,15 +69,6 @@ const SUGGESTED_LOCATIONS = [
   "the Campus Martius, Rome",
   "a villa in the Alban Hills",
 ];
-
-function formatEffects(effects: Partial<Record<AttributeKey, number>>): string {
-  return ATTRIBUTE_KEYS.filter((k) => effects[k])
-    .map((k) => {
-      const v = effects[k] as number;
-      return `${v > 0 ? "+" : "−"}${Math.abs(v)} ${SPECIAL[k].roman}`;
-    })
-    .join(", ");
-}
 
 const labelCls = "font-display text-sm uppercase tracking-widest text-stone-400";
 const inputCls =

@@ -6,13 +6,19 @@
 //   C. Narrate the result as prose                 (streamed, no tools/JSON)
 // The engine owns all numbers and dice; the model only proposes and narrates.
 
-import type { GameState, RollResult, TurnResult } from "../../shared/types.js";
+import type {
+  EquipIntent,
+  GameState,
+  RollResult,
+  TurnResult,
+} from "../../shared/types.js";
 import type { LLMClient, LLMMessage } from "./llm.js";
 import { SYSTEM_PROMPT, buildContext } from "./systemPrompt.js";
 import {
   CHECKS_SCHEMA,
   RESOLVE_SCHEMA,
   applyChecks,
+  applyEquip,
   applyResolution,
   newEffects,
   parseJSON,
@@ -38,8 +44,15 @@ export async function runTurn(
   state: GameState,
   playerAction: string,
   llm: LLMClient,
-  opts: RunTurnOptions = {}
+  opts: RunTurnOptions = {},
+  intent?: EquipIntent
 ): Promise<TurnResult> {
+  // A player equip/unequip is applied deterministically up front, so this turn's
+  // context and narration already reflect the new gear. The normal three stages
+  // then run — so equipping costs a turn and the world still gets to react
+  // (you can't freely armor up in the middle of a fight).
+  if (intent) applyEquip(state, intent);
+
   // Recent narrative as prior conversation, for continuity.
   const base: LLMMessage[] = [];
   for (const t of state.transcript) {
@@ -151,6 +164,12 @@ function summarizeEffects(state: GameState, effects: ReturnType<typeof newEffect
     `Applied effects — HP ${c.hp}/${c.maxHp}, gold ${c.gold}, reputation ${c.reputation}, level ${c.level}.`,
     `Location: ${state.world.location} (day ${state.world.day}, ${state.world.timeOfDay}).`,
   ];
+  if (effects.encumbered.length)
+    parts.push(
+      `Could not be carried (too heavy, left behind): ${effects.encumbered.join(
+        ", "
+      )}.`
+    );
   if (effects.ended) parts.push(`The game has ended (${state.ending?.outcome}).`);
   return parts.join(" ");
 }

@@ -131,6 +131,19 @@ export function effectsOf(name: string): Partial<Record<AttributeKey, number>> {
   return ABILITY_BY_NAME.get(name)?.effects ?? {};
 }
 
+/** Render attribute deltas using Roman names, e.g. "+1 Dignitas, −1 Vires".
+ *  Shared by character creation and the in-game character sheet. */
+export function formatEffects(
+  effects: Partial<Record<AttributeKey, number>>
+): string {
+  return ATTRIBUTE_KEYS.filter((k) => effects[k])
+    .map((k) => {
+      const v = effects[k] as number;
+      return `${v > 0 ? "+" : "−"}${Math.abs(v)} ${SPECIAL[k].roman}`;
+    })
+    .join(", ");
+}
+
 // ---- Suggested ancestries (narrative flavor only; free text also allowed) ----
 
 export const ANCESTRIES: string[] = [

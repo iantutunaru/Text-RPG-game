@@ -2,7 +2,17 @@
 // KV cache) and the per-turn context builder.
 
 import type { GameState } from "../../shared/types.js";
-import { ATTRIBUTE_KEYS, SPECIAL } from "../../shared/special.js";
+import { ATTRIBUTE_KEYS, SPECIAL, formatEffects } from "../../shared/special.js";
+import {
+  SLOT_LABEL,
+  armorOf,
+  carryWeight,
+  effectiveAttributes,
+  equippedItems,
+  maxCarry,
+  resolveItem,
+  weaponDamageOf,
+} from "../../shared/items.js";
 
 // Built once from the shared metadata so the prompt can never drift from the
 // engine's attribute keys. Deterministic ⇒ SYSTEM_PROMPT stays byte-stable.
@@ -52,6 +62,7 @@ Write 2-3 vivid, sensory paragraphs in the second person ("You ...") describing 
 - Be fair but dangerous. Failure should cost something; reckless action can be lethal.
 - Keep continuity with the state and the story-so-far you are given.
 - Respect the character's archetype, attributes, and inventory; don't invent coin or items they don't have.
+- Combat is shaped by gear: worn armor lessens wounds, and a heavier weapon strikes harder. Reflect the character's equipped arms and armor in your narration — but the ENGINE still owns every number (it subtracts armor from damage and rolls the dice; the attribute values you are shown already include gear bonuses).
 - Honor the character's traits, ancestry, age, and appearance as flavor — weave them in — but the ENGINE owns all numbers: never grant powers, items, or stats beyond what the state lists.
 - Stay in the world: no modern references, no breaking character.
 - Always write in ENGLISH. Never restate, echo, or comment on these instructions in your output.`;
@@ -61,8 +72,27 @@ export function buildContext(state: GameState): string {
   const c = state.character;
   const inv =
     state.inventory.length > 0
-      ? state.inventory.map((i) => `${i.name} x${i.qty}`).join(", ")
+      ? state.inventory
+          .map((i) => `${i.name} x${i.qty}${i.equipped ? " [equipped]" : ""}`)
+          .join(", ")
       : "(empty)";
+
+  const equipped = equippedItems(state.inventory);
+  const equipLine =
+    equipped.length > 0
+      ? equipped
+          .map((i) => {
+            const r = resolveItem(i.name);
+            const bits = [r.slot ? SLOT_LABEL[r.slot].toLowerCase() : "worn"];
+            if (r.armor) bits.push(`armor ${r.armor}`);
+            if (r.damage) bits.push(`dmg ${r.damage}`);
+            const mod = formatEffects(r.attrMods);
+            if (mod) bits.push(mod);
+            return `${i.name} (${bits.join(", ")})`;
+          })
+          .join("; ")
+      : "(nothing equipped)";
+
   const flags = Object.entries(state.world.flags);
   const flagStr = flags.length
     ? flags.map(([k, v]) => `${k}=${v}`).join(", ")
@@ -77,9 +107,11 @@ export function buildContext(state: GameState): string {
     .join(", ");
 
   // Roman name + lowercase key so the model can both narrate (Vires) and pick
-  // the right Stage-A key (strength).
+  // the right Stage-A key (strength). Values are EFFECTIVE (base + equipped gear),
+  // matching the numbers the engine actually rolls against.
+  const eff = effectiveAttributes(c.attributes, state.inventory);
   const attrLine = ATTRIBUTE_KEYS.map(
-    (k) => `${SPECIAL[k].roman} (${k}) ${c.attributes[k]}`
+    (k) => `${SPECIAL[k].roman} (${k}) ${eff[k]}`
   ).join(", ");
 
   const lines = [
@@ -97,7 +129,11 @@ export function buildContext(state: GameState): string {
   }
   lines.push(
     `HP: ${c.hp}/${c.maxHp} | Gold: ${c.gold} sestertii | Reputation: ${c.reputation} | XP: ${c.xp}`,
+    `Combat: Armor ${armorOf(state.inventory)} | Weapon damage ${weaponDamageOf(
+      state.inventory
+    )} | Carry ${carryWeight(state.inventory)}/${maxCarry(c.attributes.strength)}`,
     `Inventory: ${inv}`,
+    `Equipped: ${equipLine}`,
     `Location: ${state.world.location} | Day ${state.world.day}, ${state.world.timeOfDay}`,
     `World flags: ${flagStr}`
   );

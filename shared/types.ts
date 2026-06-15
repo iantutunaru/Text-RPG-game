@@ -36,6 +36,15 @@ export interface Item {
   name: string;
   description: string;
   qty: number;
+  equipped?: boolean; // worn/wielded — fills its resolved equip slot (see shared/items.ts)
+}
+
+// A player request to equip/unequip an item, carried alongside the action text so
+// the engine applies the change deterministically while the GM narrates it as a
+// turn (see server/src/gm.ts). The item is matched by name against the inventory.
+export interface EquipIntent {
+  type: "equip" | "unequip";
+  item: string;
 }
 
 // A chosen special ability. Mechanical effects (if any) are applied to the
