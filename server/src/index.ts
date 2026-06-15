@@ -6,6 +6,11 @@ import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { NewGameRequest, ServerEvent } from "../../shared/types.js";
+import {
+  MAX_ABILITIES,
+  isCuratedAbility,
+  validateStats,
+} from "../../shared/special.js";
 import { OllamaClient, MODEL } from "./llm.js";
 import { ARCHETYPES, createGame } from "./gameState.js";
 import { runTurn } from "./gm.js";
@@ -28,20 +33,84 @@ app.get("/api/health", (_req, res) => {
 
 // --- Create a new game ---
 app.post("/api/game/new", async (req, res) => {
-  const body = req.body as Partial<NewGameRequest>;
+  const body = (req.body ?? {}) as Partial<NewGameRequest>;
+
   const name = (body.name ?? "").toString().trim().slice(0, 40);
-  const archetype = body.archetype;
   if (!name) {
     return res.status(400).json({ error: "A character name is required." });
   }
+
+  const archetype = body.archetype;
   if (!archetype || !ARCHETYPES.includes(archetype)) {
     return res
       .status(400)
       .json({ error: `archetype must be one of: ${ARCHETYPES.join(", ")}` });
   }
 
+  const devMode = body.devMode === true;
+
+  const clampInt = (v: unknown, min: number, max: number, fallback: number) => {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+  };
+
+  // Narrative fields (length-capped so they can't bloat the per-turn context).
+  const age = clampInt(body.age, 12, 90, 25);
+  const ancestry =
+    (body.ancestry ?? "Roman").toString().trim().slice(0, 40) || "Roman";
+  const appearance = (body.appearance ?? "").toString().trim().slice(0, 280);
+  const background = (body.background ?? "").toString().trim().slice(0, 600);
+  const startingLocation = (body.startingLocation ?? "")
+    .toString()
+    .trim()
+    .slice(0, 80);
+
+  if (archetype === "custom" && !background) {
+    return res.status(400).json({
+      error: "A custom character needs a background to set the opening scene.",
+    });
+  }
+
+  // Stats — the server is the authority (clamp + budget; dev bypasses budget).
+  const { stats, error: statError } = validateStats(body.stats, archetype, devMode);
+  if (statError) {
+    return res.status(400).json({ error: statError });
+  }
+
+  // Curated abilities: keep only known names, dedupe, cap the count.
+  const abilityNames = Array.isArray(body.abilityNames)
+    ? Array.from(new Set(body.abilityNames.map((n) => String(n))))
+        .filter(isCuratedAbility)
+        .slice(0, MAX_ABILITIES)
+    : [];
+
+  // Dev-only free-text ability — narrative flavor only, no mechanical effects.
+  let customAbility: { name: string; description: string } | undefined;
+  if (devMode && body.customAbility && typeof body.customAbility === "object") {
+    const caName = String(body.customAbility.name ?? "").trim().slice(0, 40);
+    if (caName) {
+      customAbility = {
+        name: caName,
+        description: String(body.customAbility.description ?? "")
+          .trim()
+          .slice(0, 200),
+      };
+    }
+  }
+
   try {
-    const state = createGame(name, archetype);
+    const state = createGame({
+      name,
+      archetype,
+      age,
+      ancestry,
+      appearance,
+      background,
+      stats,
+      abilityNames,
+      customAbility,
+      startingLocation: startingLocation || undefined,
+    });
     const result = await runTurn(state, "", llm); // generate the opening scene
     res.json({
       id: state.id,

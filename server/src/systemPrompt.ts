@@ -2,6 +2,13 @@
 // KV cache) and the per-turn context builder.
 
 import type { GameState } from "../../shared/types.js";
+import { ATTRIBUTE_KEYS, SPECIAL } from "../../shared/special.js";
+
+// Built once from the shared metadata so the prompt can never drift from the
+// engine's attribute keys. Deterministic ⇒ SYSTEM_PROMPT stays byte-stable.
+const ATTRIBUTE_GUIDE = ATTRIBUTE_KEYS.map(
+  (k) => `- ${k} — ${SPECIAL[k].roman}: ${SPECIAL[k].blurb}.`
+).join("\n");
 
 export const SYSTEM_PROMPT = `You are the Game Master (GM) of a text role-playing game set in ANCIENT ROME, in the turbulent years of the late Republic and early Empire. You narrate a living world and react to the player's actions.
 
@@ -18,6 +25,11 @@ Narrate like a sharp tabletop GM, not a tour guide. Vivid and historically textu
 - Give NPCs a name, a face, and a manner the moment they matter; let them speak and act.
 - Use strong, precise verbs and vary your sentence rhythm. Cut filler and cliché. End on a fresh image, tension, or dilemma.
 
+# Attributes
+The character has seven attributes, rated 1–10 (higher is better). Each has a Roman name; in JSON checks, use the lowercase KEY shown:
+${ATTRIBUTE_GUIDE}
+When an action needs a check, pick the ONE key that best fits the action. Refer to attributes by their Roman names in your narration.
+
 # Player agency
 - Narrate only the direct, immediate result of EXACTLY what the player stated. The player is the sole author of their character's decisions.
 - NEVER decide, on the player's behalf, that they buy, sell, pay, take, eat, drink, use, accept, agree, promise, attack, hand over an item, or otherwise commit. Approaching, looking, asking, or considering does NOT commit them to anything.
@@ -28,7 +40,7 @@ Narrate like a sharp tabletop GM, not a tour guide. Vivid and historically textu
 Each turn is resolved in three stages. You will be told which stage you are in and exactly what format to reply in. Follow it strictly.
 
 ## STAGE A — CHECKS (JSON only)
-Decide which dice checks the player's action requires. Anything uncertain or risky needs a check: combat, persuasion, bribery, lies, stealth, climbing, feats of strength. Routine, safe actions need none. The ENGINE rolls the dice — you never decide success yourself. Difficulty guide: 10 easy, 14 moderate, 18 hard, 22 very hard. Also classify the action's "commitment": "committal" if the player's words explicitly commit the character to a transaction, attack, promise, or other irreversible move; "exploratory" if they only approach, look, ask, greet, or consider. Reply with JSON only.
+Decide which dice checks the player's action requires. Anything uncertain or risky needs a check: combat, persuasion, bribery, lies, stealth, climbing, feats of strength. Routine, safe actions need none. Use the attribute KEY that best fits each check (see # Attributes). The ENGINE rolls the dice — you never decide success yourself. Difficulty guide: 10 easy, 14 moderate, 18 hard, 22 very hard. Also classify the action's "commitment": "committal" if the player's words explicitly commit the character to a transaction, attack, promise, or other irreversible move; "exploratory" if they only approach, look, ask, greet, or consider. Reply with JSON only.
 
 ## STAGE B — EFFECTS (JSON only)
 Given the action and the dice results you are shown, decide the concrete consequences: changes to HP, gold (sestertii), reputation, and xp; items gained or lost; any change of location or time; 3-4 short next-action choices; and whether the game ends. Effects must follow ONLY from what the action actually commits to — an exploratory action (approach/look/ask) causes NO gold or item changes; instead expose those options as choices. Make consequences MATCH the dice — failure must cost something, and reckless action can be lethal. If HP would reach 0, the character dies (set gameOver). Reply with JSON only.
@@ -40,18 +52,9 @@ Write 2-3 vivid, sensory paragraphs in the second person ("You ...") describing 
 - Be fair but dangerous. Failure should cost something; reckless action can be lethal.
 - Keep continuity with the state and the story-so-far you are given.
 - Respect the character's archetype, attributes, and inventory; don't invent coin or items they don't have.
+- Honor the character's traits, ancestry, age, and appearance as flavor — weave them in — but the ENGINE owns all numbers: never grant powers, items, or stats beyond what the state lists.
 - Stay in the world: no modern references, no breaking character.
 - Always write in ENGLISH. Never restate, echo, or comment on these instructions in your output.`;
-
-const TIME_PRESETS = [
-  "dawn",
-  "morning",
-  "midday",
-  "afternoon",
-  "evening",
-  "night",
-];
-void TIME_PRESETS; // referenced for documentation; times validated in tools.ts
 
 /** Build the compact per-turn context block describing the current state. */
 export function buildContext(state: GameState): string {
@@ -65,15 +68,39 @@ export function buildContext(state: GameState): string {
     ? flags.map(([k, v]) => `${k}=${v}`).join(", ")
     : "(none)";
 
+  const identity = [
+    c.name,
+    Number.isFinite(c.age) && c.age > 0 ? `age ${c.age}` : null,
+    c.ancestry?.trim() ? `of ${c.ancestry.trim()} descent` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  // Roman name + lowercase key so the model can both narrate (Vires) and pick
+  // the right Stage-A key (strength).
+  const attrLine = ATTRIBUTE_KEYS.map(
+    (k) => `${SPECIAL[k].roman} (${k}) ${c.attributes[k]}`
+  ).join(", ");
+
   const lines = [
     "=== CURRENT GAME STATE ===",
-    `Character: ${c.name}, a ${c.archetype} (level ${c.level})`,
-    `Attributes: might ${c.attributes.might}, agility ${c.attributes.agility}, wits ${c.attributes.wits}, charm ${c.attributes.charm}`,
+    `Character: ${identity} — a ${c.archetype} (level ${c.level}).`,
+  ];
+  if (c.appearance?.trim()) lines.push(`Appearance: ${c.appearance.trim()}`);
+  lines.push(`Attributes: ${attrLine}`);
+  if (c.abilities?.length) {
+    lines.push(
+      `Traits: ${c.abilities
+        .map((a) => a.name)
+        .join(", ")} (honor these in narration).`
+    );
+  }
+  lines.push(
     `HP: ${c.hp}/${c.maxHp} | Gold: ${c.gold} sestertii | Reputation: ${c.reputation} | XP: ${c.xp}`,
     `Inventory: ${inv}`,
     `Location: ${state.world.location} | Day ${state.world.day}, ${state.world.timeOfDay}`,
-    `World flags: ${flagStr}`,
-  ];
+    `World flags: ${flagStr}`
+  );
   if (state.storySoFar.trim()) {
     lines.push("", "=== STORY SO FAR ===", state.storySoFar.trim());
   }

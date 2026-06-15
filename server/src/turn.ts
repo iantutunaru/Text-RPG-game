@@ -12,9 +12,8 @@ import type {
   RollResult,
   TimeOfDay,
 } from "../../shared/types.js";
+import { ATTRIBUTE_KEYS } from "../../shared/special.js";
 import { clamp, toNum } from "./gameState.js";
-
-const ATTRIBUTE_KEYS: AttributeKey[] = ["might", "agility", "wits", "charm"];
 const TIMES: TimeOfDay[] = [
   "dawn",
   "morning",
@@ -127,7 +126,7 @@ export function applyChecks(
     const c = raw as Record<string, unknown>;
     const attribute = ATTRIBUTE_KEYS.includes(c.attribute as AttributeKey)
       ? (c.attribute as AttributeKey)
-      : "might";
+      : "strength";
     const difficulty = clamp(toNum(c.difficulty, 12), 5, 30);
     const reason = String(c.reason ?? "an uncertain action");
     const roll = d20();

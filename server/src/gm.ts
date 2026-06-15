@@ -47,9 +47,14 @@ export async function runTurn(
     base.push({ role: "assistant", content: t.narrative });
   }
 
+  // On the opening turn (empty action) seed the scene from the character's
+  // premise — the archetype hook, or the player's written background (custom).
+  const premise = state.character.background?.trim();
   const actionText =
     playerAction.trim() ||
-    "Begin the adventure. Establish the opening scene from the character's situation, then present the first choices.";
+    `Begin the adventure.${
+      premise ? ` The character's situation: ${premise}` : ""
+    } Establish the opening scene from this premise and the character's identity, then present the first choices.`;
 
   base.push({
     role: "user",

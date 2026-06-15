@@ -7,15 +7,29 @@ export type Archetype =
   | "senator"
   | "legionary"
   | "merchant"
-  | "freedman";
+  | "freedman"
+  | "custom";
 
-export type AttributeKey = "might" | "agility" | "wits" | "charm";
+// SPECIAL-style attributes, reskinned for Rome. Keys stay plain English (the
+// small model fills these reliably in Stage-A JSON); the Roman display names
+// (Vires, Sensus, …) and per-key metadata live in `shared/special.ts`.
+export type AttributeKey =
+  | "strength"
+  | "perception"
+  | "endurance"
+  | "charisma"
+  | "intelligence"
+  | "agility"
+  | "luck";
 
 export interface Attributes {
-  might: number;
+  strength: number;
+  perception: number;
+  endurance: number;
+  charisma: number;
+  intelligence: number;
   agility: number;
-  wits: number;
-  charm: number;
+  luck: number;
 }
 
 export interface Item {
@@ -24,10 +38,24 @@ export interface Item {
   qty: number;
 }
 
+// A chosen special ability. Mechanical effects (if any) are applied to the
+// attributes once at creation and are NOT re-applied each turn; this stored
+// record is the narrative tag the GM honors. Curated abilities live in
+// `shared/special.ts`; a dev free-text ability has no effects.
+export interface Ability {
+  name: string;
+  description: string;
+}
+
 export interface Character {
   name: string;
   archetype: Archetype;
+  age: number;
+  ancestry: string; // narrative flavor, e.g. "Gaul", "Greek" (no mechanics)
+  appearance: string; // narrative flavor used for GM descriptions
+  background: string; // the premise that seeds the opening scene
   attributes: Attributes;
+  abilities: Ability[];
   hp: number;
   maxHp: number;
   gold: number; // sestertii
@@ -136,6 +164,15 @@ export interface RollResult {
 export interface NewGameRequest {
   name: string;
   archetype: Archetype;
+  age: number;
+  ancestry: string;
+  appearance: string;
+  background: string; // required for the "custom" path; optional color otherwise
+  stats: Attributes; // the player's allocated SPECIAL values (validated server-side)
+  abilityNames: string[]; // ids/names of curated abilities chosen
+  customAbility?: { name: string; description: string }; // dev-mode free-text ability
+  startingLocation?: string; // "custom" path only
+  devMode?: boolean; // unlocks manual stats / custom ability; bypasses the point budget
 }
 
 export interface TurnResult {

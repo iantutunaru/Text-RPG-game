@@ -2,6 +2,7 @@
 
 import { nanoid } from "nanoid";
 import type {
+  Ability,
   Archetype,
   Attributes,
   Character,
@@ -9,30 +10,37 @@ import type {
   Item,
   World,
 } from "../../shared/types.js";
+import {
+  applyAbilityEffects,
+  deriveMaxHp,
+  getAbility,
+} from "../../shared/special.js";
 
+// "custom" is a valid path for new games (no preset — the player supplies the
+// background, starting location, and stats).
 export const ARCHETYPES: Archetype[] = [
   "gladiator",
   "senator",
   "legionary",
   "merchant",
   "freedman",
+  "custom",
 ];
 
+// Per-archetype starting kit and premise. Attributes and maxHp are NOT here:
+// stats come from the player's validated allocation (see shared/special.ts) and
+// maxHp is derived from Endurance (Vigor).
 interface ArchetypePreset {
-  attributes: Attributes;
-  maxHp: number;
   gold: number;
   reputation: number;
   inventory: Item[];
   location: string;
-  /** Opening situation handed to the GM to generate the first scene. */
+  /** Opening situation handed to the GM to seed the first scene. */
   hook: string;
 }
 
-const PRESETS: Record<Archetype, ArchetypePreset> = {
+const PRESETS: Record<Exclude<Archetype, "custom">, ArchetypePreset> = {
   gladiator: {
-    attributes: { might: 8, agility: 6, wits: 4, charm: 4 },
-    maxHp: 32,
     gold: 15,
     reputation: 5,
     inventory: [
@@ -43,8 +51,6 @@ const PRESETS: Record<Archetype, ArchetypePreset> = {
     hook: "You are a slave sworn to the arena, training in the great gladiator school beside the Colosseum. Dawn breaks over the sands; the lanista's whip and the promise of freedom both wait. Your first match approaches.",
   },
   senator: {
-    attributes: { might: 3, agility: 4, wits: 8, charm: 8 },
-    maxHp: 18,
     gold: 500,
     reputation: 30,
     inventory: [
@@ -56,8 +62,6 @@ const PRESETS: Record<Archetype, ArchetypePreset> = {
     hook: "You are a senator of Rome in restless times. The Curia hums with rumor of plots between Optimates and Populares; a discreet message reached you at dawn, hinting that your name is spoken in a dangerous conspiracy.",
   },
   legionary: {
-    attributes: { might: 7, agility: 6, wits: 5, charm: 4 },
-    maxHp: 28,
     gold: 50,
     reputation: 10,
     inventory: [
@@ -69,8 +73,6 @@ const PRESETS: Record<Archetype, ArchetypePreset> = {
     hook: "You are a legionary of Rome posted to a cold fort on the Rhine frontier. Scouts have not returned, the Germanic tribes are stirring beyond the river, and your centurion is calling the contubernium to muster in the grey dawn.",
   },
   merchant: {
-    attributes: { might: 4, agility: 5, wits: 7, charm: 7 },
-    maxHp: 20,
     gold: 300,
     reputation: 10,
     inventory: [
@@ -82,8 +84,6 @@ const PRESETS: Record<Archetype, ArchetypePreset> = {
     hook: "You are a mercator newly arrived at the teeming port of Ostia, a ship of Egyptian grain and Syrian glass riding at anchor. Fortunes are made and lost here in a morning — and a harbor official is eyeing your cargo with too much interest.",
   },
   freedman: {
-    attributes: { might: 5, agility: 6, wits: 6, charm: 5 },
-    maxHp: 22,
     gold: 10,
     reputation: -10,
     inventory: [
@@ -95,37 +95,93 @@ const PRESETS: Record<Archetype, ArchetypePreset> = {
   },
 };
 
-export function getHook(archetype: Archetype): string {
-  return PRESETS[archetype].hook;
+// Defaults for the "custom" path when the player gives no starting location/kit.
+const CUSTOM_DEFAULTS = {
+  gold: 30,
+  reputation: 0,
+  location: "the Forum Romanum, Rome",
+  inventory: [
+    { name: "Traveler's tunic", description: "Plain, road-worn cloth.", qty: 1 },
+    { name: "Coin purse", description: "A handful of mixed coin.", qty: 1 },
+  ] as Item[],
+};
+
+/** Validated, sanitized creation input (assembled by the /api/game/new route). */
+export interface CreateGameInput {
+  name: string;
+  archetype: Archetype;
+  age: number;
+  ancestry: string;
+  appearance: string;
+  background: string; // resolved premise; for presets, may be "" (falls back to the hook)
+  stats: Attributes; // validated & clamped, BEFORE ability effects
+  abilityNames: string[]; // curated ability names (already filtered & capped)
+  customAbility?: { name: string; description: string }; // dev free-text (narrative only)
+  startingLocation?: string; // custom path only
 }
 
-export function createGame(name: string, archetype: Archetype): GameState {
-  const preset = PRESETS[archetype];
+export function createGame(input: CreateGameInput): GameState {
   const now = new Date().toISOString();
+  const isCustom = input.archetype === "custom";
+  const preset = isCustom ? null : PRESETS[input.archetype as Exclude<Archetype, "custom">];
+
+  // Bake curated-ability effects into the allocated stats (clamped 1–10).
+  const attributes = applyAbilityEffects(input.stats, input.abilityNames);
+  const maxHp = deriveMaxHp(attributes.endurance);
+
+  // Stored ability tags (name + description) the GM honors. Curated abilities
+  // pull their description from the catalog; the dev ability is narrative only.
+  const abilities: Ability[] = [];
+  for (const name of input.abilityNames) {
+    const def = getAbility(name);
+    if (def) abilities.push({ name: def.name, description: def.description });
+  }
+  if (input.customAbility?.name) {
+    abilities.push({
+      name: input.customAbility.name,
+      description: input.customAbility.description,
+    });
+  }
+
   const character: Character = {
-    name,
-    archetype,
-    attributes: { ...preset.attributes },
-    hp: preset.maxHp,
-    maxHp: preset.maxHp,
-    gold: preset.gold,
-    reputation: preset.reputation,
+    name: input.name,
+    archetype: input.archetype,
+    age: input.age,
+    ancestry: input.ancestry,
+    appearance: input.appearance,
+    background: input.background.trim() || preset?.hook || "",
+    attributes,
+    abilities,
+    hp: maxHp,
+    maxHp,
+    gold: preset?.gold ?? CUSTOM_DEFAULTS.gold,
+    reputation: preset?.reputation ?? CUSTOM_DEFAULTS.reputation,
     level: 1,
     xp: 0,
   };
+
+  const location = isCustom
+    ? input.startingLocation?.trim() || CUSTOM_DEFAULTS.location
+    : preset!.location;
+
+  const inventory = (isCustom ? CUSTOM_DEFAULTS.inventory : preset!.inventory).map(
+    (i) => ({ ...i })
+  );
+
   const world: World = {
-    location: preset.location,
+    location,
     day: 1,
     timeOfDay: "dawn",
     flags: {},
   };
+
   return {
     id: nanoid(12),
     createdAt: now,
     updatedAt: now,
     status: "active",
     character,
-    inventory: preset.inventory.map((i) => ({ ...i })),
+    inventory,
     world,
     transcript: [],
     storySoFar: "",

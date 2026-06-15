@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Archetype, GameState, RollResult } from "@shared";
+import type { GameState, NewGameRequest, RollResult } from "@shared";
 import * as api from "./api";
 import CharacterCreation from "./components/CharacterCreation";
 import GameScreen from "./components/GameScreen";
@@ -34,11 +34,11 @@ export default function App() {
       .finally(() => setBooting(false));
   }, []);
 
-  async function startGame(name: string, archetype: Archetype) {
+  async function startGame(req: NewGameRequest) {
     setCreating(true);
     setError(null);
     try {
-      const res = await api.createGame({ name, archetype });
+      const res = await api.createGame(req);
       localStorage.setItem(STORAGE_KEY, res.id);
       setState(res.state);
       setChoices(res.choices);
