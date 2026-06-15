@@ -1,8 +1,10 @@
 # Roma — an AI-powered text RPG of Ancient Rome
 
-A web-based text RPG where a local AI model acts as your Game Master. Pick an
-archetype (gladiator, senator, legionary, merchant, freedman) and play out a
-story in the late Roman Republic. Stats, dice rolls, inventory, and combat are
+A web-based text RPG where a local AI model acts as your Game Master. Create a
+character — name, age, ancestry, looks, and backstory — pick one of five paths
+(gladiator, senator, legionary, merchant, freedman) or forge a fully custom one,
+distribute Rome-flavored SPECIAL attributes, and choose special abilities, then
+play out a story in the late Roman Republic. Stats, dice rolls, inventory, and combat are
 all tracked deterministically in code — the AI narrates and *proposes* mechanical
 effects in forced-JSON stages while the engine owns every dice roll and stat
 change, so the numbers stay honest.
@@ -26,6 +28,15 @@ Stop by closing that window (or Ctrl+C). See **Run it** for the terminal equival
 - **Game engine (TypeScript)** owns all numbers: HP, gold, reputation, inventory,
   and the dice. The AI cannot fudge outcomes — when an action is uncertain, the
   engine rolls the dice and hands the result back for the AI to narrate.
+- **Character creation uses SPECIAL, reskinned for Rome.** Build a character with a
+  name, age, ancestry, appearance, and a custom background; take one of five paths or
+  a fully custom one; and distribute seven attributes — *Vires, Sensus, Vigor,
+  Dignitas, Ingenium, Celeritas, Fortuna* (a Rome-flavored take on Fallout's SPECIAL)
+  — from a baseline spread plus a point pool (each 1–10). Pick up to two special
+  abilities (small, code-applied trait effects), with a **Dev mode** for setting stats
+  by hand and writing a free-text ability. Attributes feed the d20 checks and
+  Endurance (Vigor) sets your starting HP; the engine still owns every number. All of
+  this is defined once in `shared/special.ts`.
 - **AI Game Master** is a local model served by [Ollama](https://ollama.com),
   reached through a small `LLMClient` interface (`server/src/llm.ts`) so you can
   later swap in a free hosted tier or a paid API without touching game logic.
@@ -128,20 +139,23 @@ Shortcuts so the next session (human or AI) can get productive quickly:
 ```
 shared/
   types.ts           Types shared by client and server
+  special.ts         SPECIAL attributes (Roman names), abilities, balance + validation
   mapData.ts         Map landmark anchors (image coords) + location→anchor matcher
 server/src/
   llm.ts             LLMClient interface + Ollama implementation
   systemPrompt.ts    GM system prompt + per-turn context builder
   turn.ts            Forced-JSON schemas, dice rolling, effect application
   gm.ts              The GM engine: three-stage turn (checks → effects → narration)
-  gameState.ts       Archetype presets + state factory
+  gameState.ts       Archetype presets (kit/hook) + character/state factory
   history.ts         Narrative windowing + summarization
   mapGen.ts          Deterministic, seeded ASCII chunk generation (per-theme)
   mapEngine.ts       Derives world/local map state from the location each turn
-  persistence.ts     JSON save files
+  persistence.ts     JSON save files (+ migration of older saves on load)
   index.ts           Express server + SSE
 client/src/          Vite + React + Tailwind UI
   components/
+    CharacterCreation.tsx  Character sheet: identity, SPECIAL allocator, abilities
+    StatsPanel.tsx   In-game character panel (HP, gold, the seven attributes, traits)
     LocalMap.tsx     Persistent ASCII minimap panel
     MapOverlay.tsx   World/Rome image map with you-are-here marker + zoom
 ```
