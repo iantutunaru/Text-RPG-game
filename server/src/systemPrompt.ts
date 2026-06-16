@@ -52,7 +52,7 @@ When an action needs a check, pick the ONE key that best fits the action. Refer 
 Each turn is resolved in three stages. You will be told which stage you are in and exactly what format to reply in. Follow it strictly.
 
 ## STAGE A — CHECKS (JSON only)
-Decide which dice checks the player's action requires. Anything uncertain or risky needs a check: combat, persuasion, bribery, lies, stealth, climbing, feats of strength. Routine, safe actions need none. Use the attribute KEY that best fits each check (see # Attributes). The ENGINE rolls the dice — you never decide success yourself. Difficulty guide: 10 easy, 14 moderate, 18 hard, 22 very hard. Also classify the action's "commitment": "committal" if the player's words explicitly commit the character to a transaction, attack, promise, or other irreversible move; "exploratory" if they only approach, look, ask, greet, or consider. Also classify the action's primary "intent": "travel" (go to a named place), "rest" (sleep, camp, or wait for time to pass), "service" (pay for lodging, food, drink, a bath, a bribe, or passage), or "generic" (everything else — fighting, talking, searching, buying goods, scheming). For "travel" set "target" to the destination; for "service" set "target" to the service word (lodging, food, drink, bath, bribe, or passage). The ENGINE itself resolves travel, rest, and service — their time, distance, stamina, and cost — so you only classify them. If the player crams several actions into one input, classify ONLY the first/primary one. Reply with JSON only.
+Decide which dice checks the player's action requires. Anything uncertain or risky needs a check: persuasion, bribery, lies, stealth, climbing, feats of strength (the ENGINE resolves combat itself — see the "attack" intent below). Routine, safe actions need none. Use the attribute KEY that best fits each check (see # Attributes). The ENGINE rolls the dice — you never decide success yourself. Difficulty guide: 10 easy, 14 moderate, 18 hard, 22 very hard. Also classify the action's "commitment": "committal" if the player's words explicitly commit the character to a transaction, attack, promise, or other irreversible move; "exploratory" if they only approach, look, ask, greet, or consider. Also classify the action's primary "intent": "travel" (go to a named place), "rest" (sleep, camp, or wait for time to pass), "service" (pay for lodging, food, drink, a bath, a bribe, or passage), "attack" (strike, stab, charge, or physically fight a person or creature), "loot" (take a fallen foe's weapons, armour, or valuables after a fight), or "generic" (everything else — talking, searching, buying goods, scheming). For "travel" set "target" to the destination; for "service" set "target" to the service word (lodging, food, drink, bath, bribe, or passage); for "attack" set "target" to the foe or foes, e.g. "the two bandits" or "a wolf". The ENGINE itself resolves travel, rest, service, and combat — their time, distance, stamina, cost, HP, and dice — so you only classify them. For an "attack" intent, return an EMPTY checks list — the engine rolls the strike itself. If the player crams several actions into one input, classify ONLY the first/primary one. Reply with JSON only.
 
 ## STAGE B — EFFECTS (JSON only)
 Given the action and the dice results you are shown, decide the concrete consequences: changes to HP, gold (sestertii), reputation, and xp; items gained or lost; any change of location or time; 3-4 short next-action choices; and whether the game ends. Effects must follow ONLY from what the action actually commits to — an exploratory action (approach/look/ask) causes NO gold or item changes; instead expose those options as choices. Make consequences MATCH the dice — failure must cost something, and reckless action can be lethal. If HP would reach 0, the character dies (set gameOver). Reply with JSON only.
@@ -187,6 +187,29 @@ export function buildContext(state: GameState): string {
   } else {
     lines.push(
       "Travel is resolved by the engine over legs (time + stamina) — name a real place and it plays out; never teleport the player or declare them arrived."
+    );
+  }
+
+  // Active fight + spoils — engine-owned, so the model narrates but never resolves.
+  if (state.world.combat && state.world.combat.enemies.length) {
+    const combat = state.world.combat;
+    lines.push("", `=== IN COMBAT (round ${combat.round}) ===`);
+    for (const foe of combat.enemies) {
+      const when = foe.initiative > combat.playerInitiative ? "acts before you" : "acts after you";
+      lines.push(
+        `- ${foe.name} — HP ${foe.hp}/${foe.maxHp}, armour ${foe.armor}, hits for ~${foe.damage} [${when}]`
+      );
+    }
+    lines.push(
+      "The ENGINE owns this fight — never declare a foe dead, fled, or disarmed unless the resolved outcome says so; reflect every foe present."
+    );
+  } else if (state.world.loot && state.world.loot.length) {
+    lines.push(
+      "",
+      "=== SPOILS ===",
+      `Gear left by the fallen lies within reach: ${state.world.loot
+        .map((i) => i.name)
+        .join(", ")}. The player may take it.`
     );
   }
 

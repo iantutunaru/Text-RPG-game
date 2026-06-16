@@ -23,6 +23,13 @@ service turns skip Stage B entirely (Stage A → engine → Stage C narration).
       restored by rest/food; exhaustion penalty on rolls; shown in StatsPanel + CharacterSheet.
 - [x] **Real challenges / failure.** Refusals (status, affordability, availability), per-leg road
       hazard checks, and exhaustion now make actions cost something instead of auto-succeeding.
+- [x] **Enemy-HP combat (composed foes, initiative, loot).** Combat is now an engine-owned
+      `attack` intent (`resolveAttack` in `server/src/actions.ts`) that skips Stage B, plus a
+      `loot` intent. Foes live in `world.combat.enemies`, each *composed* from parts
+      (species/origin/rank/role + gear from `shared/items.ts`) via `shared/enemies.ts` — no flat
+      bestiary. Rounds resolve in initiative order (player initiative from Celeritas); `softenDamage`
+      (`shared/combat.ts`) mitigates both ways; slain foes drop their gear to `world.loot`. The old
+      `TODO(enemy-hp)` marker now hosts the residual generic-turn foe swing.
 
 ## Partial
 
@@ -31,7 +38,4 @@ service turns skip Stage B entirely (Stage A → engine → Stage C narration).
 
 ## Remaining
 
-- [ ] **Enemy-HP combat model.** Combat is still one-sided. The seam is intact:
-      `resolveAttackDamage(state)` and the `TODO(enemy-hp)` marker in `applyResolution`
-      (`server/src/turn.ts`). Add a `world.enemy` combatant and subtract `resolveAttackDamage`
-      from its HP at the marker — additive, not a refactor.
+- _(nothing outstanding — the realism & simulation backlog is complete)_

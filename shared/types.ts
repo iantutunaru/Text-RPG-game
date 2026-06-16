@@ -114,6 +114,37 @@ export interface TravelState {
   perLegEnergy: number; // energy each leg drains
 }
 
+// ---- Combat ----
+
+// A single foe in an active fight. Like an Item, an enemy is the model's to NAME
+// and the engine's to STAT: `resolveEnemy` (shared/enemies.ts) composes the named
+// foe from parts (species + origin + rank + gear + role) into these numbers, and
+// the engine owns every one of them thereafter. The gear it carries is kept so a
+// slain foe can drop it as loot.
+export interface Enemy {
+  name: string; // display name, e.g. "a veteran Gaulish spearman" (model-named)
+  kind: string; // matched preset/species — for context & display only
+  hp: number;
+  maxHp: number;
+  armor: number; // damage soaked from each player hit (derived from gear)
+  damage: number; // damage dealt to the player per swing (pre-armor)
+  defenseDc: number; // DC the player's to-hit roll must beat
+  initMod: number; // static initiative modifier (species + rank + role)
+  initiative: number; // d20 + initMod, rolled once at encounter start; turn order vs. the player
+  weapon?: string; // gear item name (loot + flavor); absent for unarmed foes / beasts
+  armorItems?: string[]; // gear item names worn (loot); absent for beasts
+}
+
+// An active combat encounter — engine-owned and transient (absent ⇒ no fight).
+// Each player attack resolves ONE round; combatants act in descending initiative
+// order, so a foe faster than the player strikes before the player does. Cleared
+// on victory, death, or a successful flee. See server/src/actions.ts:resolveAttack.
+export interface CombatState {
+  enemies: Enemy[]; // living foes; emptied ⇒ the encounter is over (victory)
+  playerInitiative: number; // the player's rolled initiative for this encounter
+  round: number; // rounds resolved so far (1-based once the fight begins)
+}
+
 export interface World {
   location: string;
   day: number;
@@ -125,6 +156,8 @@ export interface World {
   // simply drops off the list. Optional on pre-feature saves.
   npcsPresent?: ScenePresence[];
   travel?: TravelState; // set while a multi-leg journey is underway; else absent
+  combat?: CombatState; // set while a fight is underway; else absent
+  loot?: Item[]; // gear dropped by slain foes, awaiting pickup; cleared when taken or left behind
 }
 
 // ---- Journal ----
