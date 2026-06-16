@@ -8,14 +8,46 @@ interface Props {
   items: Item[];
 }
 
-function Bar({ value, max }: { value: number; max: number }) {
+function Bar({
+  value,
+  max,
+  tone = "vital",
+}: {
+  value: number;
+  max: number;
+  tone?: "vital" | "energy";
+}) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
+  // Vitals (HP) run green→amber→red with danger; energy is a calmer sky bar so
+  // the two are easy to tell apart at a glance.
   const color =
-    pct > 50 ? "bg-emerald-600" : pct > 25 ? "bg-amber-600" : "bg-red-600";
+    tone === "energy"
+      ? "bg-sky-600"
+      : pct > 50
+        ? "bg-emerald-600"
+        : pct > 25
+          ? "bg-amber-600"
+          : "bg-red-600";
   return (
     <div className="h-2.5 w-full overflow-hidden rounded-full bg-stone-700">
       <div className={`h-full ${color}`} style={{ width: `${pct}%` }} />
     </div>
+  );
+}
+
+function StatusBadge({ status }: { status: Character["status"] }) {
+  const meta =
+    status === "enslaved"
+      ? { label: "Enslaved", cls: "border-red-800 text-red-300" }
+      : status === "freedman"
+        ? { label: "Libertus", cls: "border-amber-700 text-amber-300" }
+        : { label: "Free", cls: "border-stone-600 text-stone-400" };
+  return (
+    <span
+      className={`inline-block rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${meta.cls}`}
+    >
+      {meta.label}
+    </span>
   );
 }
 
@@ -58,6 +90,9 @@ export default function StatsPanel({ character: c, world, items }: Props) {
         </span>
       </div>
       {identity && <div className="mt-0.5 text-xs text-stone-500">{identity}</div>}
+      <div className="mt-1.5">
+        <StatusBadge status={c.status} />
+      </div>
 
       <div className="mt-3 space-y-1">
         <div className="flex justify-between text-sm">
@@ -67,6 +102,16 @@ export default function StatsPanel({ character: c, world, items }: Props) {
           </span>
         </div>
         <Bar value={c.hp} max={c.maxHp} />
+      </div>
+
+      <div className="mt-2 space-y-1">
+        <div className="flex justify-between text-sm">
+          <span className="text-stone-300">Energy</span>
+          <span className="text-stone-300">
+            {c.energy}/{c.maxEnergy}
+          </span>
+        </div>
+        <Bar value={c.energy} max={c.maxEnergy} tone="energy" />
       </div>
 
       <div className="mt-3 flex justify-between text-sm">

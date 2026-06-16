@@ -76,6 +76,20 @@ export default function GameScreen({
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
         {/* Main column */}
         <div className="flex min-h-0 flex-col gap-3">
+          {state.world.travel && (
+            <div className="flex items-center justify-between rounded-md border border-sky-800/60 bg-sky-950/40 px-4 py-2 text-sm text-sky-200">
+              <span>
+                🧭 Traveling to{" "}
+                <span className="font-display text-sky-100">
+                  {state.world.travel.destLabel}
+                </span>
+              </span>
+              <span className="text-sky-300/80">
+                {state.world.travel.legsDone} of {state.world.travel.legsTotal} legs
+              </span>
+            </div>
+          )}
+
           <NarrativeLog
             transcript={state.transcript}
             streaming={streaming}

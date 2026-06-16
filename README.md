@@ -4,10 +4,10 @@ A web-based text RPG where a local AI model acts as your Game Master. Create a
 character — name, age, ancestry, looks, and backstory — pick one of five paths
 (gladiator, senator, legionary, merchant, freedman) or forge a fully custom one,
 distribute Rome-flavored SPECIAL attributes, and choose special abilities, then
-play out a story in the late Roman Republic. Stats, dice rolls, inventory, and combat are
-all tracked deterministically in code — the AI narrates and *proposes* mechanical
-effects in forced-JSON stages while the engine owns every dice roll and stat
-change, so the numbers stay honest. Open a full **character sheet** any time to review
+play out a story in the late Roman Republic. Stats, dice rolls, inventory, combat,
+time, travel, and stamina are all tracked deterministically in code — the AI narrates
+and *proposes* mechanical effects in forced-JSON stages while the engine owns every
+dice roll, coin, and step, so the numbers stay honest. Open a full **character sheet** any time to review
 your tale and manage **equipment** — arms and armor the engine folds into your
 attributes, your defense, and how much you can carry.
 
@@ -37,15 +37,17 @@ Stop by closing that window (or Ctrl+C). See **Run it** for the terminal equival
   — from a baseline spread plus a point pool (each 1–10). Pick up to two special
   abilities (small, code-applied trait effects), with a **Dev mode** for setting stats
   by hand and writing a free-text ability. Attributes feed the d20 checks and
-  Endurance (Vigor) sets your starting HP; the engine still owns every number. All of
-  this is defined once in `shared/special.ts`.
+  Endurance (Vigor) sets both your starting HP and your **stamina**; the engine still
+  owns every number. All of this is defined once in `shared/special.ts`.
 - **AI Game Master** is a local model served by [Ollama](https://ollama.com),
   reached through a small `LLMClient` interface (`server/src/llm.ts`) so you can
   later swap in a free hosted tier or a paid API without touching game logic.
 - **Each turn runs in three stages** (`server/src/gm.ts`): the model lists the
-  dice checks an action needs (A → engine rolls) and classifies how far the action
-  commits you, proposes the mechanical effects given those rolls (B → engine
-  applies), then narrates the result (C, streamed).
+  dice checks an action needs and classifies how far the action commits you **and what
+  kind of action it is** (A → engine rolls), proposes the mechanical effects given those
+  rolls (B → engine applies), then narrates the result (C, streamed). Travel, rest, and
+  paid services are resolved by the **engine itself** and skip stage B entirely, so the
+  model can never forget to spend your coin or advance the day.
 - **You stay the author of your own choices.** Approaching a merchant, looking over
   goods, or asking a question never commits you to buying, taking, eating, or
   fighting. The engine treats such actions as *exploratory* and refuses to spend
@@ -62,6 +64,17 @@ Stop by closing that window (or Ctrl+C). See **Run it** for the terminal equival
   carrying. To make this possible the model tags each choice with the state it depends on,
   and the engine — not the model — decides whether that condition holds (`coherentChoices`,
   also in `server/src/turn.ts`).
+- **A simulated world the engine owns, not the AI.** Real places — the Subura, Ostia,
+  Carthage, the Rhine — and real time and stamina are the engine's to keep. **Travel**
+  plays out *stepwise* across the map: a check, a stretch of time, and stamina spent each
+  leg, with the choice to press on, make camp, or turn back — so distance and danger
+  matter and you can never teleport. **Resting** turns the day over and restores you;
+  **services** (a room for the night, a meal, the baths, a bribe, sea passage) cost real
+  coin the engine deducts from a price table — no more free lodging. A **stamina** vital
+  (from Vigor, like HP) drains as you act and forces you to rest, and an exhausted body
+  rolls worse. And your **standing is enforced in code**: an enslaved gladiator is bound
+  to the ludus and *cannot* simply walk out — the guards turn you back, and your only
+  roads to freedom are manumission or escape (`server/src/actions.ts`).
 - **Inventory, equipment, and a character sheet.** A **📜 Character** button opens a
   full wax-tablet sheet — your identity and backstory, vitals and XP, attributes,
   traits, and gear. Items carry weight and equip slots, derived in code from a curated
@@ -75,7 +88,9 @@ Stop by closing that window (or Ctrl+C). See **Run it** for the terminal equival
   location is matched to a known landmark (`shared/mapData.ts`) to drop a
   *you-are-here* marker on the world / Rome images, and a deterministic, seeded
   **ASCII** local map (`server/src/mapGen.ts`) is themed by the kind of place
-  you're in and grows in chunks as the story moves you around.
+  you're in and grows in chunks as the story moves you around. Those same landmarks
+  carry a thumbnail of real Roman knowledge — what each place is and which services it
+  offers — fed to the GM each turn so its world stays plausible (no inns on the Forum).
 - **A Journal that writes itself.** A **📖 Journal** button opens a log the engine
   keeps for you: every **place you visit** and every **named NPC you meet** — with
   where and when you first crossed paths — recorded deterministically from state the
@@ -168,15 +183,17 @@ Shortcuts so the next session (human or AI) can get productive quickly:
 ```
 shared/
   types.ts           Types shared by client and server
-  special.ts         SPECIAL attributes (Roman names), abilities, balance + validation
+  special.ts         SPECIAL attributes (Roman names), abilities, balance + validation (HP + stamina)
   items.ts           Item catalog + keyword fallback → equip slots, weight, armor, damage, carry
-  mapData.ts         Map landmark anchors (image coords) + location→anchor matcher
+  economy.ts         Service price table (lodging, food, passage…) + free-text → service matcher
+  mapData.ts         Map landmark anchors + Roman lore/services + location matcher + travel distances
 server/src/
   llm.ts             LLMClient interface + Ollama implementation
   systemPrompt.ts    GM system prompt + per-turn context builder
-  turn.ts            Forced-JSON schemas, dice rolling, effect application
+  turn.ts            Forced-JSON schemas (checks + intent), dice rolling, effect application
   gm.ts              The GM engine: three-stage turn (checks → effects → narration)
-  gameState.ts       Archetype presets (kit/hook) + character/state factory
+  actions.ts         Engine-owned resolvers: stepwise travel, rest, and paid services
+  gameState.ts       Archetype presets (kit/hook/status) + character/state factory
   history.ts         Narrative windowing + summarization
   journal.ts         Per-day journal recap, written at day's end (places/NPCs are in turn.ts)
   mapGen.ts          Deterministic, seeded ASCII chunk generation (per-theme)

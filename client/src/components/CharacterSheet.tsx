@@ -90,6 +90,19 @@ export default function CharacterSheet({
   const hpPct = (c.hp / c.maxHp) * 100;
   const hpColor =
     hpPct > 50 ? "bg-emerald-600" : hpPct > 25 ? "bg-amber-600" : "bg-red-700";
+  const energyPct = (c.energy / c.maxEnergy) * 100;
+  const statusLabel =
+    c.status === "enslaved"
+      ? "Enslaved"
+      : c.status === "freedman"
+        ? "Libertus"
+        : "Free";
+  const statusCls =
+    c.status === "enslaved"
+      ? "border-red-700/60 text-red-800"
+      : c.status === "freedman"
+        ? "border-amber-700/60 text-amber-800"
+        : "border-[var(--color-ink)]/30 text-[var(--color-ink)]/60";
   const carryColor =
     load > cap * 0.9 ? "bg-[var(--color-terracotta)]" : "bg-[var(--color-ink)]/50";
 
@@ -131,6 +144,11 @@ export default function CharacterSheet({
                 <span className="normal-case"> — {identity}</span>
               )}
             </div>
+            <span
+              className={`mt-1 inline-block rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${statusCls}`}
+            >
+              {statusLabel}
+            </span>
           </div>
           <button
             onClick={onClose}
@@ -152,6 +170,15 @@ export default function CharacterSheet({
                 </span>
               </div>
               <Bar pct={hpPct} className={hpColor} />
+            </div>
+            <div>
+              <div className="flex justify-between text-sm">
+                <span>Energy</span>
+                <span>
+                  {c.energy}/{c.maxEnergy}
+                </span>
+              </div>
+              <Bar pct={energyPct} className="bg-sky-600" />
             </div>
             <div>
               <div className="flex justify-between text-sm">

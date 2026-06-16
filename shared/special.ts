@@ -82,6 +82,8 @@ export const POINT_POOL = 5; // points to distribute on top of the baseline
 export const MAX_ABILITIES = 2;
 const HP_BASE = 14;
 const HP_PER_ENDURANCE = 2;
+const ENERGY_BASE = 10;
+const ENERGY_PER_ENDURANCE = 1;
 
 // ---- Per-archetype baseline spreads (each sums to 35; avg 5/stat) ----
 
@@ -175,6 +177,12 @@ export function statTotal(stats: Attributes): number {
 /** Endurance (Vigor) drives starting max HP, faithful to SPECIAL. */
 export function deriveMaxHp(endurance: number): number {
   return HP_BASE + clampStat(endurance) * HP_PER_ENDURANCE;
+}
+
+/** Endurance (Vigor) also drives stamina: max energy, mirroring HP. Drained by
+ *  travel and strenuous action, restored by rest. */
+export function deriveMaxEnergy(endurance: number): number {
+  return ENERGY_BASE + clampStat(endurance) * ENERGY_PER_ENDURANCE;
 }
 
 export interface StatValidation {

@@ -13,6 +13,8 @@ import {
   resolveItem,
   weaponDamageOf,
 } from "../../shared/items.js";
+import { getAnchor, journeyPlan, matchAnchor } from "../../shared/mapData.js";
+import { SERVICE_PRICES } from "../../shared/economy.js";
 
 // Built once from the shared metadata so the prompt can never drift from the
 // engine's attribute keys. Deterministic ⇒ SYSTEM_PROMPT stays byte-stable.
@@ -50,7 +52,7 @@ When an action needs a check, pick the ONE key that best fits the action. Refer 
 Each turn is resolved in three stages. You will be told which stage you are in and exactly what format to reply in. Follow it strictly.
 
 ## STAGE A — CHECKS (JSON only)
-Decide which dice checks the player's action requires. Anything uncertain or risky needs a check: combat, persuasion, bribery, lies, stealth, climbing, feats of strength. Routine, safe actions need none. Use the attribute KEY that best fits each check (see # Attributes). The ENGINE rolls the dice — you never decide success yourself. Difficulty guide: 10 easy, 14 moderate, 18 hard, 22 very hard. Also classify the action's "commitment": "committal" if the player's words explicitly commit the character to a transaction, attack, promise, or other irreversible move; "exploratory" if they only approach, look, ask, greet, or consider. Reply with JSON only.
+Decide which dice checks the player's action requires. Anything uncertain or risky needs a check: combat, persuasion, bribery, lies, stealth, climbing, feats of strength. Routine, safe actions need none. Use the attribute KEY that best fits each check (see # Attributes). The ENGINE rolls the dice — you never decide success yourself. Difficulty guide: 10 easy, 14 moderate, 18 hard, 22 very hard. Also classify the action's "commitment": "committal" if the player's words explicitly commit the character to a transaction, attack, promise, or other irreversible move; "exploratory" if they only approach, look, ask, greet, or consider. Also classify the action's primary "intent": "travel" (go to a named place), "rest" (sleep, camp, or wait for time to pass), "service" (pay for lodging, food, drink, a bath, a bribe, or passage), or "generic" (everything else — fighting, talking, searching, buying goods, scheming). For "travel" set "target" to the destination; for "service" set "target" to the service word (lodging, food, drink, bath, bribe, or passage). The ENGINE itself resolves travel, rest, and service — their time, distance, stamina, and cost — so you only classify them. If the player crams several actions into one input, classify ONLY the first/primary one. Reply with JSON only.
 
 ## STAGE B — EFFECTS (JSON only)
 Given the action and the dice results you are shown, decide the concrete consequences: changes to HP, gold (sestertii), reputation, and xp; items gained or lost; any change of location or time; 3-4 short next-action choices; and whether the game ends. Effects must follow ONLY from what the action actually commits to — an exploratory action (approach/look/ask) causes NO gold or item changes; instead expose those options as choices. Make consequences MATCH the dice — failure must cost something, and reckless action can be lethal. If HP would reach 0, the character dies (set gameOver). Reply with JSON only.
@@ -62,6 +64,7 @@ Write 2-3 vivid, sensory paragraphs in the second person ("You ...") describing 
 - Be fair but dangerous. Failure should cost something; reckless action can be lethal.
 - Keep continuity with the state and the story-so-far you are given.
 - Respect the character's archetype, attributes, and inventory; don't invent coin or items they don't have.
+- Status, stamina & place: the player has a social status (enslaved/freedman/free) and a stamina bar, both engine-owned. An ENSLAVED character is bound to one place and CANNOT simply leave or travel away — never narrate them walking out freely; their only roads out are manumission or escape. Paid services cost coin (the engine deducts it). Use the HERE and TRAVEL facts you are given — don't invent places or services that aren't there, and never teleport the player across distances.
 - Combat is shaped by gear: worn armor lessens wounds, and a heavier weapon strikes harder. Reflect the character's equipped arms and armor in your narration — but the ENGINE still owns every number (it subtracts armor from damage and rolls the dice; the attribute values you are shown already include gear bonuses).
 - Honor the character's traits, ancestry, age, and appearance as flavor — weave them in — but the ENGINE owns all numbers: never grant powers, items, or stats beyond what the state lists.
 - Stay in the world: no modern references, no breaking character.
@@ -127,16 +130,66 @@ export function buildContext(state: GameState): string {
         .join(", ")} (honor these in narration).`
     );
   }
+  const statusLabel =
+    c.status === "enslaved"
+      ? `ENSLAVED${c.boundLocation ? `, bound to ${c.boundLocation}` : ""} — cannot freely leave or travel`
+      : c.status === "freedman"
+        ? "a freedman (libertus)"
+        : "free";
+
   lines.push(
-    `HP: ${c.hp}/${c.maxHp} | Gold: ${c.gold} sestertii | Reputation: ${c.reputation} | XP: ${c.xp}`,
+    `HP: ${c.hp}/${c.maxHp} | Energy: ${c.energy}/${c.maxEnergy} | Gold: ${c.gold} sestertii | Reputation: ${c.reputation} | XP: ${c.xp}`,
     `Combat: Armor ${armorOf(state.inventory)} | Weapon damage ${weaponDamageOf(
       state.inventory
     )} | Carry ${carryWeight(state.inventory)}/${maxCarry(c.attributes.strength)}`,
     `Inventory: ${inv}`,
     `Equipped: ${equipLine}`,
     `Location: ${state.world.location} | Day ${state.world.day}, ${state.world.timeOfDay}`,
+    `Status: ${statusLabel}`,
     `World flags: ${flagStr}`
   );
+
+  // Curated knowledge of the current place + travel options — keeps the model from
+  // inventing implausible services (an inn on the Forum) or teleporting the player.
+  const here = matchAnchor(state.world.location);
+  if (here) {
+    lines.push("", "=== HERE ===", here.blurb);
+    if (here.services.length) {
+      const svc = here.services
+        .map((s) => `${s} (${SERVICE_PRICES[s]} sst)`)
+        .join(", ");
+      lines.push(
+        `Services for sale here: ${svc}. The engine charges these — do not invent others this place doesn't offer.`
+      );
+    } else {
+      lines.push("No paid services are offered here.");
+    }
+  }
+
+  lines.push("", "=== TRAVEL ===");
+  if (state.world.travel) {
+    const tr = state.world.travel;
+    lines.push(
+      `The player is ON A JOURNEY to ${tr.destLabel} — leg ${tr.legsDone} of ${tr.legsTotal} done. They may press on, make camp, or turn back. Do NOT place them at ${tr.destLabel} until the engine says they have arrived.`
+    );
+  } else if (here) {
+    lines.push(
+      "Travel is resolved by the engine over legs (time + stamina) — name a real place and it plays out; never teleport the player or declare them arrived. Rough distances from here:"
+    );
+    for (const id of ["forum", "subura", "ostia", "carthago", "alexandria", "rhine_frontier"]) {
+      const dest = getAnchor(id);
+      if (!dest || dest.id === here.id) continue;
+      const plan = journeyPlan(here, dest);
+      const days = plan.legs * plan.perLegDays;
+      const when = days === 0 ? "same city" : `~${days} day${days === 1 ? "" : "s"}`;
+      lines.push(`- ${dest.label} (${when})`);
+    }
+  } else {
+    lines.push(
+      "Travel is resolved by the engine over legs (time + stamina) — name a real place and it plays out; never teleport the player or declare them arrived."
+    );
+  }
+
   if (state.storySoFar.trim()) {
     lines.push("", "=== STORY SO FAR ===", state.storySoFar.trim());
   }
