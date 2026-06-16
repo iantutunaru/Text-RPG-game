@@ -45,9 +45,10 @@ Stop by closing that window (or Ctrl+C). See **Run it** for the terminal equival
 - **Each turn runs in three stages** (`server/src/gm.ts`): the model lists the
   dice checks an action needs and classifies how far the action commits you **and what
   kind of action it is** (A → engine rolls), proposes the mechanical effects given those
-  rolls (B → engine applies), then narrates the result (C, streamed). Travel, rest, and
-  paid services are resolved by the **engine itself** and skip stage B entirely, so the
-  model can never forget to spend your coin or advance the day.
+  rolls (B → engine applies), then narrates the result (C, streamed). Travel, rest,
+  paid services, and combat are resolved by the **engine itself** and skip stage B
+  entirely, so the model can never forget to spend your coin, advance the day, or let a
+  foe forget to strike back.
 - **You stay the author of your own choices.** Approaching a merchant, looking over
   goods, or asking a question never commits you to buying, taking, eating, or
   fighting. The engine treats such actions as *exploratory* and refuses to spend
@@ -84,6 +85,16 @@ Stop by closing that window (or Ctrl+C). See **Run it** for the terminal equival
   and your **Weapon damage**, while a Vires-based **carry limit** caps what you can haul.
   Equipping is itself a narrated action that costs a turn, so you can't silently re-arm
   in the middle of a fight.
+- **Two-sided, engine-owned combat.** When you attack, the engine runs the fight: it rolls
+  **initiative** for you (from Celeritas) and each foe — faster foes strike first — resolves
+  each round's hits with your weapon damage and armor on *both* sides, and tracks every foe's
+  **HP**. Foes aren't a fixed bestiary: each is *composed* from parts — species, origin, rank,
+  role, and **gear drawn from the same catalog you use** (`shared/enemies.ts`, `shared/items.ts`)
+  — so a "legionary" is *human · Roman · regular · gladius · lorica/scutum/galea · soldier*, and
+  you can face "a veteran Gaulish spearman" with no special-cased entry. Defeat a foe and the
+  fallen **drop their gear** for you to take; or **break away and flee**. Like travel and rest,
+  it's all resolved in code (`resolveAttack` in `server/src/actions.ts`) — the model only names
+  the foe and narrates.
 - **Maps are derived from the story, not authored by the AI.** Your free-form
   location is matched to a known landmark (`shared/mapData.ts`) to drop a
   *you-are-here* marker on the world / Rome images, and a deterministic, seeded
@@ -185,6 +196,8 @@ shared/
   types.ts           Types shared by client and server
   special.ts         SPECIAL attributes (Roman names), abilities, balance + validation (HP + stamina)
   items.ts           Item catalog + keyword fallback → equip slots, weight, armor, damage, carry
+  combat.ts          softenDamage — armor mitigation shared by player and foes
+  enemies.ts         Enemy composition (species/origin/rank/role + catalog gear) → stats; presets + name overlay
   economy.ts         Service price table (lodging, food, passage…) + free-text → service matcher
   mapData.ts         Map landmark anchors + Roman lore/services + location matcher + travel distances
 server/src/
@@ -192,7 +205,7 @@ server/src/
   systemPrompt.ts    GM system prompt + per-turn context builder
   turn.ts            Forced-JSON schemas (checks + intent), dice rolling, effect application
   gm.ts              The GM engine: three-stage turn (checks → effects → narration)
-  actions.ts         Engine-owned resolvers: stepwise travel, rest, and paid services
+  actions.ts         Engine-owned resolvers: travel, rest, paid services, and combat/loot (composed foes, initiative, gear drops)
   gameState.ts       Archetype presets (kit/hook/status) + character/state factory
   history.ts         Narrative windowing + summarization
   journal.ts         Per-day journal recap, written at day's end (places/NPCs are in turn.ts)
@@ -204,7 +217,7 @@ client/src/          Vite + React + Tailwind UI
   components/
     CharacterCreation.tsx  Creation flow: identity, SPECIAL allocator, abilities
     CharacterSheet.tsx     In-game sheet (wax-tablet modal): identity, vitals/XP, combat, attributes, equip
-    StatsPanel.tsx   In-game sidebar panel (HP, gold, armor, carry, the seven attributes, traits)
+    StatsPanel.tsx   In-game sidebar panel (HP, gold, armor, carry, attributes, traits) + active-enemy HP bars & spoils
     ScenePanel.tsx   In-game sidebar panel: the NPCs present in the scene right now
     Journal.tsx      Journal modal: per-day recaps (arrow navigation), places visited, people met
     LocalMap.tsx     Persistent ASCII minimap panel

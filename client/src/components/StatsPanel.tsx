@@ -164,6 +164,48 @@ export default function StatsPanel({ character: c, world, items }: Props) {
           Day {world.day} · {world.timeOfDay}
         </div>
       </div>
+
+      {world.combat && world.combat.enemies.length > 0 && (
+        <div className="mt-4 border-t border-red-900/60 pt-3">
+          <div className="font-display text-sm uppercase tracking-widest text-red-400">
+            ⚔ In combat
+          </div>
+          <ul className="mt-2 space-y-2">
+            {world.combat.enemies.map((foe, i) => {
+              const pct = Math.max(0, Math.min(100, (foe.hp / foe.maxHp) * 100));
+              return (
+                <li key={i}>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-parchment">{foe.name}</span>
+                    <span className="text-stone-300">
+                      {foe.hp}/{foe.maxHp}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-stone-700">
+                    <div className="h-full bg-red-700" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="mt-0.5 text-xs text-stone-500">
+                    🛡 {foe.armor} · hits for ~{foe.damage}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {!world.combat && world.loot && world.loot.length > 0 && (
+        <div className="mt-4 border-t border-amber-900/50 pt-3 text-sm">
+          <div className="text-xs uppercase tracking-wide text-amber-400/80">
+            Spoils within reach
+          </div>
+          <div className="mt-1 text-stone-300">
+            {world.loot
+              .map((i) => (i.qty > 1 ? `${i.name} ×${i.qty}` : i.name))
+              .join(", ")}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

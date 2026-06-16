@@ -132,6 +132,13 @@ function normalizeState(state: GameState): GameState {
   if (state.world && !Array.isArray(state.world.npcsPresent)) {
     state.world.npcsPresent = [];
   }
+  // Combat and dropped loot are transient: a finished game keeps neither, so an
+  // ended save never reopens mid-fight or with phantom spoils. Active saves keep
+  // them, so resuming mid-fight works. Absence is the correct default — no backfill.
+  if (state.world && state.status === "ended") {
+    state.world.combat = undefined;
+    state.world.loot = undefined;
+  }
 
   return state;
 }

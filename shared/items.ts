@@ -95,6 +95,10 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
 /** Infer an item's mechanics from keywords in its name (for items the GM invents). */
 function keywordFallback(key: string): ItemDef | undefined {
   const has = (...subs: string[]) => subs.some((s) => key.includes(s));
+  if (has("club", "cudgel", "mace", "bludgeon", "staff"))
+    return { slot: "weapon", weight: 2, damage: 3 };
+  if (has("axe", "securis", "hatchet"))
+    return { slot: "weapon", weight: 4, damage: 5 };
   if (has("gladius", "spatha", "hasta", "sword", "blade", "pugio", "dagger", "knife", "spear"))
     return { slot: "weapon", weight: 3, damage: 4 };
   if (has("lorica", "mail", "armor", "armour", "cuirass", "breastplate"))

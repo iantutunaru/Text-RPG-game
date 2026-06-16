@@ -103,7 +103,13 @@ export async function runTurn(
   // (`intent` is the equip param; this classification is `actionIntent`.)
   const actionIntent: Intent = playerAction.trim() ? readIntent(checksParsed) : "generic";
   const target = readTarget(checksParsed);
-  const checkSummary = applyChecks(state, checksParsed.checks, effects);
+  // An attack is resolved entirely by the engine (it rolls the strike itself), so
+  // skip Stage-A checks for it — otherwise the model's combat check would roll and
+  // drain energy on top of the engine's own to-hit.
+  const checkSummary =
+    actionIntent === "attack"
+      ? "No pre-checks — the engine resolves the strike itself."
+      : applyChecks(state, checksParsed.checks, effects);
   for (const roll of effects.rolls) opts.onRoll?.(roll);
 
   // The dice results become shared context for stages B and C.

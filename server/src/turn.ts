@@ -27,6 +27,7 @@ import {
   weaponDamageOf,
 } from "../../shared/items.js";
 import { clamp, toNum } from "./gameState.js";
+import { softenDamage } from "../../shared/combat.js";
 export const TIMES: TimeOfDay[] = [
   "dawn",
   "morning",
@@ -68,14 +69,23 @@ export const CHECKS_SCHEMA = {
     // that forgets to emit dayDelta/location/goldDelta can no longer break them.
     // "generic" keeps the normal model-driven Stage-B path. `target` carries the
     // destination (travel) or the service/place (service), e.g. "Ostia", "lodging".
-    intent: { type: "string", enum: ["generic", "travel", "rest", "service"] },
+    intent: {
+      type: "string",
+      enum: ["generic", "travel", "rest", "service", "attack", "loot"],
+    },
     target: { type: "string" },
   },
   required: ["checks", "commitment", "intent"],
 };
 
 export type Commitment = "exploratory" | "committal";
-export type Intent = "generic" | "travel" | "rest" | "service";
+export type Intent =
+  | "generic"
+  | "travel"
+  | "rest"
+  | "service"
+  | "attack"
+  | "loot";
 
 /** Read Stage-A's commitment classification. Defaults to "committal" so a
  *  missing/garbled value never blocks a genuine transaction (fail safe). */
@@ -87,7 +97,13 @@ export function readCommitment(parsed: Record<string, unknown>): Commitment {
  *  falls through to the normal model-driven Stage-B path (fail safe). */
 export function readIntent(parsed: Record<string, unknown>): Intent {
   const i = parsed.intent;
-  return i === "travel" || i === "rest" || i === "service" ? i : "generic";
+  return i === "travel" ||
+    i === "rest" ||
+    i === "service" ||
+    i === "attack" ||
+    i === "loot"
+    ? i
+    : "generic";
 }
 
 /** The free-form destination/service target Stage A attached to the intent. */
@@ -209,7 +225,7 @@ export function newEffects(): TurnEffects {
   return { rolls: [], choices: null, ended: false, encumbered: [] };
 }
 
-function d20(): number {
+export function d20(): number {
   return Math.floor(Math.random() * 20) + 1;
 }
 
@@ -390,28 +406,27 @@ export function applyResolution(
   const c = state.character;
   const exploratory = commitment === "exploratory";
 
-  // Vital stats (clamped). On exploratory turns, gold can't be spent.
-  // Incoming damage is softened by equipped armor — but a real hit always
-  // stings (≥1), so armor protects without granting invincibility.
-  const rawHp = toNum(res.hpDelta);
-  let hpDelta = rawHp;
-  if (rawHp < 0) {
-    const taken = Math.max(1, -rawHp - armorOf(state.inventory));
-    hpDelta = -taken;
+  // Vital stats (clamped). On exploratory turns, gold can't be spent. Incoming
+  // damage is softened by equipped armor (softenDamage) — a real hit always stings
+  // (≥1), so armor protects without granting invincibility.
+  //
+  // While a fight is LIVE, a generic Stage-B turn (talk, scheme, use an item) is
+  // NOT safe: every living foe gets one engine-owned swing and the model's hpDelta
+  // is ignored, so the engine alone owns combat damage. The attack/flee/loot
+  // intents resolve in actions.ts (they skip Stage B) and never reach this path.
+  if (state.world.combat?.enemies.length) {
+    for (const foe of state.world.combat.enemies) {
+      c.hp = clamp(c.hp - softenDamage(foe.damage, armorOf(state.inventory)), 0, c.maxHp);
+    }
+  } else {
+    const rawHp = toNum(res.hpDelta);
+    const hpDelta = rawHp < 0 ? -softenDamage(-rawHp, armorOf(state.inventory)) : rawHp;
+    c.hp = clamp(c.hp + hpDelta, 0, c.maxHp);
   }
-  c.hp = clamp(c.hp + hpDelta, 0, c.maxHp);
-  // TODO(enemy-hp): once an enemy combatant model exists, subtract
-  // resolveAttackDamage(state) from the target's HP here. For now the player's
-  // weapon damage only informs narration — there is no entity to apply it to.
   const goldDelta = exploratory ? Math.max(0, toNum(res.goldDelta)) : toNum(res.goldDelta);
   c.gold = Math.max(0, c.gold + goldDelta);
   c.reputation = clamp(c.reputation + toNum(res.reputationDelta), -100, 100);
-  c.xp = Math.max(0, c.xp + toNum(res.xpDelta));
-  while (c.xp >= c.level * 100) {
-    c.level += 1;
-    c.maxHp += 5;
-    c.hp = Math.min(c.maxHp, c.hp + 5);
-  }
+  grantXp(state, toNum(res.xpDelta));
 
   // Inventory — suppressed entirely on exploratory turns (no buying/looting/giving).
   const add = exploratory || !Array.isArray(res.addItems) ? [] : res.addItems;
@@ -578,14 +593,24 @@ export function recordScene(state: GameState, res: Record<string, unknown>): voi
   }
 }
 
-/** Attack damage the player would deal this turn (equipped weapon, or unarmed).
- *
- *  PLACEHOLDER for the upcoming enemy-HP combat model. Today there is no enemy
- *  entity to apply it to, so this value only informs narration; the function and
- *  its future call site (see the `TODO(enemy-hp)` marker in `applyResolution`)
- *  exist so that wiring real combat later is additive, not a refactor. */
+/** Attack damage the player deals on a hit this turn (equipped weapon, or unarmed).
+ *  Called by the combat resolver (`resolveAttack` in actions.ts) and folded through
+ *  `softenDamage` against the foe's armour. */
 export function resolveAttackDamage(state: GameState): number {
   return weaponDamageOf(state.inventory);
+}
+
+/** Award XP and apply any level-ups (+5 maxHp and +5 current HP per level). The
+ *  single source of truth for leveling — used by Stage-B resolution and combat
+ *  victories alike, so a kill that crosses a threshold levels the player too. */
+export function grantXp(state: GameState, amount: number): void {
+  const c = state.character;
+  c.xp = Math.max(0, c.xp + Math.max(0, Math.round(amount)));
+  while (c.xp >= c.level * 100) {
+    c.level += 1;
+    c.maxHp += 5;
+    c.hp = Math.min(c.maxHp, c.hp + 5);
+  }
 }
 
 /** Apply a player's equip/unequip request deterministically — the engine owns the
