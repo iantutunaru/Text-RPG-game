@@ -8,6 +8,7 @@ import {
   ATTRIBUTE_KEYS,
   archetypeBaseline,
   clampStat,
+  deriveMaxEnergy,
   deriveMaxHp,
 } from "../../shared/special.js";
 
@@ -84,6 +85,26 @@ function normalizeState(state: GameState): GameState {
     c.maxHp = deriveMaxHp(a.endurance);
   }
   if (typeof c.hp !== "number") c.hp = c.maxHp;
+
+  // Energy (stamina) is newer than HP — backfill from Vigor, the same way.
+  if (typeof c.maxEnergy !== "number" || (c.maxEnergy as number) <= 0) {
+    c.maxEnergy = deriveMaxEnergy(a.endurance);
+  }
+  if (typeof c.energy !== "number") c.energy = c.maxEnergy as number;
+
+  // Freedom status predates older saves — infer it from the archetype, and bind an
+  // enslaved gladiator to the ludus so the travel gate has somewhere to hold them.
+  if (c.status !== "enslaved" && c.status !== "freedman" && c.status !== "free") {
+    c.status =
+      c.archetype === "gladiator"
+        ? "enslaved"
+        : c.archetype === "freedman"
+          ? "freedman"
+          : "free";
+  }
+  if (c.status === "enslaved" && typeof c.boundLocation !== "string") {
+    c.boundLocation = "the Ludus Magnus (gladiator school), Rome";
+  }
 
   // Inventory items predating the equipment system have no `equipped` flag.
   if (Array.isArray(state.inventory)) {

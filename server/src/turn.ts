@@ -27,7 +27,7 @@ import {
   weaponDamageOf,
 } from "../../shared/items.js";
 import { clamp, toNum } from "./gameState.js";
-const TIMES: TimeOfDay[] = [
+export const TIMES: TimeOfDay[] = [
   "dawn",
   "morning",
   "midday",
@@ -35,6 +35,13 @@ const TIMES: TimeOfDay[] = [
   "evening",
   "night",
 ];
+
+// Energy (stamina) tuning. Strenuous checks tire the body; once energy is spent,
+// the exhausted roll at a penalty until they rest. Travel/rest energy costs and
+// restoration live with those mechanics in actions.ts.
+const STRENUOUS_CHECK_ENERGY = 1;
+const EXHAUSTION_PENALTY = 3;
+const STRENUOUS_ATTRS: AttributeKey[] = ["strength", "endurance", "agility"];
 
 // --- Stage A: which dice checks does the action require? ---
 // `commitment` rides this call so the engine can enforce player agency: an
@@ -56,16 +63,36 @@ export const CHECKS_SCHEMA = {
       },
     },
     commitment: { type: "string", enum: ["exploratory", "committal"] },
+    // The action's primary KIND. The engine OWNS the consequences of travel/rest/
+    // service (day, location, gold, energy) deterministically, so a small model
+    // that forgets to emit dayDelta/location/goldDelta can no longer break them.
+    // "generic" keeps the normal model-driven Stage-B path. `target` carries the
+    // destination (travel) or the service/place (service), e.g. "Ostia", "lodging".
+    intent: { type: "string", enum: ["generic", "travel", "rest", "service"] },
+    target: { type: "string" },
   },
-  required: ["checks", "commitment"],
+  required: ["checks", "commitment", "intent"],
 };
 
 export type Commitment = "exploratory" | "committal";
+export type Intent = "generic" | "travel" | "rest" | "service";
 
 /** Read Stage-A's commitment classification. Defaults to "committal" so a
  *  missing/garbled value never blocks a genuine transaction (fail safe). */
 export function readCommitment(parsed: Record<string, unknown>): Commitment {
   return parsed.commitment === "exploratory" ? "exploratory" : "committal";
+}
+
+/** Read Stage-A's intent. Defaults to "generic" so anything the model garbles
+ *  falls through to the normal model-driven Stage-B path (fail safe). */
+export function readIntent(parsed: Record<string, unknown>): Intent {
+  const i = parsed.intent;
+  return i === "travel" || i === "rest" || i === "service" ? i : "generic";
+}
+
+/** The free-form destination/service target Stage A attached to the intent. */
+export function readTarget(parsed: Record<string, unknown>): string {
+  return typeof parsed.target === "string" ? parsed.target.trim() : "";
 }
 
 // --- Stage B: mechanical effects, choices, and ending ---
@@ -186,6 +213,35 @@ function d20(): number {
   return Math.floor(Math.random() * 20) + 1;
 }
 
+/** Roll a single d20 check against an EFFECTIVE attribute (equipped gear folded
+ *  in) and record it on `effects`. A depleted body (energy 0) rolls at a penalty.
+ *  Shared by Stage-A checks and the engine's own travel hazard rolls (actions.ts). */
+export function rollCheck(
+  state: GameState,
+  effects: TurnEffects,
+  attribute: AttributeKey,
+  difficulty: number,
+  reason: string
+): RollResult {
+  const eff = effectiveAttributes(state.character.attributes, state.inventory);
+  const roll = d20();
+  let modifier = eff[attribute];
+  if (state.character.energy <= 0) modifier -= EXHAUSTION_PENALTY; // exhaustion
+  const total = roll + modifier;
+  const result: RollResult = {
+    attribute,
+    difficulty,
+    roll,
+    modifier,
+    total,
+    success: total >= difficulty,
+    margin: total - difficulty,
+    reason,
+  };
+  effects.rolls.push(result);
+  return result;
+}
+
 /** Roll every requested check in code. Returns a summary string for the model. */
 export function applyChecks(
   state: GameState,
@@ -195,8 +251,6 @@ export function applyChecks(
   const checks = Array.isArray(rawChecks) ? rawChecks : [];
   if (checks.length === 0) return "No checks were required for this action.";
 
-  // Equipped gear can shift attributes; roll against the EFFECTIVE values.
-  const eff = effectiveAttributes(state.character.attributes, state.inventory);
   const lines: string[] = [];
   for (const raw of checks) {
     if (!raw || typeof raw !== "object") continue;
@@ -206,24 +260,14 @@ export function applyChecks(
       : "strength";
     const difficulty = clamp(toNum(c.difficulty, 12), 5, 30);
     const reason = String(c.reason ?? "an uncertain action");
-    const roll = d20();
-    const modifier = eff[attribute];
-    const total = roll + modifier;
-    const success = total >= difficulty;
-    const result: RollResult = {
-      attribute,
-      difficulty,
-      roll,
-      modifier,
-      total,
-      success,
-      margin: total - difficulty,
-      reason,
-    };
-    effects.rolls.push(result);
+    const result = rollCheck(state, effects, attribute, difficulty, reason);
+    // Physical effort tires the body — a small stamina cost per strenuous check.
+    if (STRENUOUS_ATTRS.includes(attribute)) {
+      state.character.energy = Math.max(0, state.character.energy - STRENUOUS_CHECK_ENERGY);
+    }
     lines.push(
-      `- ${reason}: d20(${roll})+${attribute}(${modifier})=${total} vs ${difficulty} -> ${
-        success ? "SUCCESS" : "FAILURE"
+      `- ${reason}: d20(${result.roll})+${attribute}(${result.modifier})=${result.total} vs ${difficulty} -> ${
+        result.success ? "SUCCESS" : "FAILURE"
       } (margin ${result.margin})`
     );
   }

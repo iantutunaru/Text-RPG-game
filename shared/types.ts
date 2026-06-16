@@ -56,6 +56,11 @@ export interface Ability {
   description: string;
 }
 
+// Legal/social standing — drives engine-owned movement gating. An "enslaved"
+// character is bound to `boundLocation` and cannot freely travel away; only the
+// ENGINE (never the model) changes this, on manumission. See server/src/actions.ts.
+export type PlayerStatus = "enslaved" | "freedman" | "free";
+
 export interface Character {
   name: string;
   archetype: Archetype;
@@ -67,10 +72,14 @@ export interface Character {
   abilities: Ability[];
   hp: number;
   maxHp: number;
+  energy: number; // stamina vital — drained by action, restored by rest (engine-owned)
+  maxEnergy: number; // derived from Endurance (Vigor), like maxHp
   gold: number; // sestertii
   reputation: number; // -100 .. 100
   level: number;
   xp: number;
+  status: PlayerStatus; // enslaved / freedman / free — gates travel
+  boundLocation?: string; // place an enslaved character may not leave (e.g. the ludus)
 }
 
 export type TimeOfDay =
@@ -80,6 +89,30 @@ export type TimeOfDay =
   | "afternoon"
   | "evening"
   | "night";
+
+// A paid service the engine charges for deterministically (the model never sets
+// the price). Price table lives in shared/economy.ts.
+export type ServiceKind =
+  | "lodging"
+  | "food"
+  | "drink"
+  | "bath"
+  | "bribe"
+  | "passage";
+
+// An in-progress journey, owned by the engine. Travel plays out over several
+// turns — one leg at a time — so distance and danger matter and teleporting is
+// impossible. Cleared on arrival or when the player turns back. See
+// server/src/actions.ts:resolveTravel.
+export interface TravelState {
+  destAnchorId: string; // map anchor being traveled to
+  destLabel: string; // human location string set on arrival
+  fromLabel: string; // where the journey began (used when the player turns back)
+  legsTotal: number; // legs the whole journey takes
+  legsDone: number; // legs completed so far
+  perLegDays: number; // in-game days each leg costs
+  perLegEnergy: number; // energy each leg drains
+}
 
 export interface World {
   location: string;
@@ -91,6 +124,7 @@ export interface World {
   // derived map — never a mechanical gate. Replaced each turn, so an NPC leaving
   // simply drops off the list. Optional on pre-feature saves.
   npcsPresent?: ScenePresence[];
+  travel?: TravelState; // set while a multi-leg journey is underway; else absent
 }
 
 // ---- Journal ----
