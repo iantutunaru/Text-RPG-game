@@ -286,6 +286,31 @@ export interface RollResult {
 
 // ---- Wire payloads ----
 
+// The action verb the player picks from the verb bar (client ActionInput). Each
+// maps 1:1 to an engine `intent` server-side (server/src/turn.ts:VERB_INTENT), so
+// the player DECLARES the intent and the small model never has to classify it.
+// "flee" is travel-while-in-combat; "talk"/"examine" are generic+exploratory;
+// "other" (or omitted) defers to the model's Stage-A classification.
+export type IntentVerb =
+  | "attack"
+  | "flee"
+  | "go"
+  | "take"
+  | "pay"
+  | "rest"
+  | "talk"
+  | "examine"
+  | "other";
+
+// Body of POST /api/game/:id/action. `verb` is the explicit player intent (above);
+// `intent` is the optional equip/unequip request, applied up front and narrated as
+// part of the turn (see server/src/gm.ts).
+export interface ActionRequest {
+  action: string;
+  verb?: IntentVerb;
+  intent?: EquipIntent;
+}
+
 export interface NewGameRequest {
   name: string;
   archetype: Archetype;

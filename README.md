@@ -42,29 +42,27 @@ Stop by closing that window (or Ctrl+C). See **Run it** for the terminal equival
 - **AI Game Master** is a local model served by [Ollama](https://ollama.com),
   reached through a small `LLMClient` interface (`server/src/llm.ts`) so you can
   later swap in a free hosted tier or a paid API without touching game logic.
-- **Each turn runs in three stages** (`server/src/gm.ts`): the model lists the
-  dice checks an action needs and classifies how far the action commits you **and what
-  kind of action it is** (A → engine rolls), proposes the mechanical effects given those
-  rolls (B → engine applies), then narrates the result (C, streamed). Travel, rest,
-  paid services, and combat are resolved by the **engine itself** and skip stage B
+- **You drive each turn with an explicit VERB.** Rather than typing free prose the AI
+  has to interpret, you pick the action — **Attack · Go · Talk · Examine · Take · Pay ·
+  Rest** (plus **Other** for anything off the menu) — then name its object ("Attack" →
+  *whom?*, "Go" → *where?*). Each verb maps 1:1 to an engine action
+  (`shared/types.ts` → `VERB_INTENT` in `server/src/turn.ts`), so the engine never has
+  to *guess* what you meant — the cause of misread combat or bribery is gone. Under the
+  hood a turn runs in up to three stages (`server/src/gm.ts`): the model lists the dice
+  checks an action needs (A → engine rolls), proposes mechanical effects for a free-form
+  action (B → engine applies), then narrates the result (C, streamed). **Travel, rest,
+  paid services, and combat are resolved by the engine itself** and skip stage B
   entirely, so the model can never forget to spend your coin, advance the day, or let a
   foe forget to strike back.
-- **You stay the author of your own choices.** Approaching a merchant, looking over
-  goods, or asking a question never commits you to buying, taking, eating, or
-  fighting. The engine treats such actions as *exploratory* and refuses to spend
-  your gold or alter your inventory on them — instead it surfaces the real options
-  as choices (e.g. *Buy the grapes · Haggle the price · Walk away*) and stops the
-  narration at your next decision. Only when your words actually commit (buy, pay,
-  attack…) does a transaction occur — and then anything you pay for is added to your
-  inventory. This guard is enforced in code (`applyResolution` in `server/src/turn.ts`),
-  so the AI can't railroad you even if it tries. And the *choices* it offers are held
-  to the same standard: every proposed next action is checked against your real state —
-  your equipped gear, your purse, what's in your pack, and facts the engine has recorded
-  about the scene — and any that contradict it are quietly dropped. You'll never be asked
-  to sheathe a sword you already stowed, buy what you can't afford, or use what you aren't
-  carrying. To make this possible the model tags each choice with the state it depends on,
-  and the engine — not the model — decides whether that condition holds (`coherentChoices`,
-  also in `server/src/turn.ts`).
+- **You stay the author of your own choices.** Your *verb* tells the engine how far you
+  commit: **Talk**, **Examine**, and the like are *exploratory* — approaching, looking,
+  or asking never spends your gold or alters your pack — while **Attack**, **Pay**, and
+  **Take** are *committal*. The engine enforces this in code (`applyResolution` in
+  `server/src/turn.ts`): on an exploratory turn it refuses to buy, loot, or hand over
+  anything, so the AI can't railroad you into a transaction you never chose. And the verb
+  bar is **contextual** — in a fight it offers only **Attack / Flee** (with Examine and
+  Other); on the road, **Press on / Make camp / Turn back** — so the moves on offer always
+  match the situation, with no stale or impossible options to wade through.
 - **A simulated world the engine owns, not the AI.** Real places — the Subura, Ostia,
   Carthage, the Rhine — and real time and stamina are the engine's to keep. **Travel**
   plays out *stepwise* across the map: a check, a stretch of time, and stamina spent each

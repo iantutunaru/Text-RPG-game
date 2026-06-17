@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { EquipIntent, GameState, NewGameRequest, RollResult } from "@shared";
+import type { EquipIntent, GameState, IntentVerb, NewGameRequest, RollResult } from "@shared";
 import * as api from "./api";
 import CharacterCreation from "./components/CharacterCreation";
 import GameScreen from "./components/GameScreen";
@@ -8,7 +8,6 @@ const STORAGE_KEY = "roma-rpg-game-id";
 
 export default function App() {
   const [state, setState] = useState<GameState | null>(null);
-  const [choices, setChoices] = useState<string[]>([]);
   const [streaming, setStreaming] = useState("");
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [liveRolls, setLiveRolls] = useState<RollResult[]>([]);
@@ -28,7 +27,6 @@ export default function App() {
       .loadGame(id)
       .then((s) => {
         setState(s);
-        setChoices(s.lastChoices ?? []);
       })
       .catch(() => localStorage.removeItem(STORAGE_KEY))
       .finally(() => setBooting(false));
@@ -41,7 +39,6 @@ export default function App() {
       const res = await api.createGame(req);
       localStorage.setItem(STORAGE_KEY, res.id);
       setState(res.state);
-      setChoices(res.choices);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -49,19 +46,24 @@ export default function App() {
     }
   }
 
-  async function takeAction(action: string, intent?: EquipIntent) {
+  async function takeAction(
+    action: string,
+    opts?: { verb?: IntentVerb; equip?: EquipIntent }
+  ) {
     if (!state || busy) return;
     setBusy(true);
     setError(null);
     setStreaming("");
     setLiveRolls([]);
     setPendingAction(action);
-    setChoices([]);
 
     let live = "";
     const rolls: RollResult[] = [];
     try {
-      for await (const ev of api.streamAction(state.id, action, intent)) {
+      for await (const ev of api.streamAction(state.id, action, {
+        verb: opts?.verb,
+        intent: opts?.equip,
+      })) {
         if (ev.type === "token") {
           live += ev.text;
           setStreaming(live);
@@ -70,7 +72,6 @@ export default function App() {
           setLiveRolls([...rolls]);
         } else if (ev.type === "done") {
           setState(ev.result.state);
-          setChoices(ev.result.choices);
         } else if (ev.type === "error") {
           setError(ev.message);
         }
@@ -88,7 +89,6 @@ export default function App() {
   function newGame() {
     localStorage.removeItem(STORAGE_KEY);
     setState(null);
-    setChoices([]);
     setError(null);
   }
 
@@ -113,7 +113,6 @@ export default function App() {
   return (
     <GameScreen
       state={state}
-      choices={choices}
       streaming={streaming}
       pendingAction={pendingAction}
       liveRolls={liveRolls}

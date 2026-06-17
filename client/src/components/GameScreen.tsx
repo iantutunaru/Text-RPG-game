@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { EquipIntent, GameState, RollResult } from "@shared";
+import type { EquipIntent, GameState, IntentVerb, RollResult } from "@shared";
 import NarrativeLog from "./NarrativeLog";
 import StatsPanel from "./StatsPanel";
 import InventoryPanel from "./InventoryPanel";
@@ -8,24 +8,21 @@ import LocalMap from "./LocalMap";
 import MapOverlay from "./MapOverlay";
 import CharacterSheet from "./CharacterSheet";
 import Journal from "./Journal";
-import ChoiceButtons from "./ChoiceButtons";
 import ActionInput from "./ActionInput";
 
 interface Props {
   state: GameState;
-  choices: string[];
   streaming: string;
   pendingAction: string | null;
   liveRolls: RollResult[];
   busy: boolean;
   error: string | null;
-  onAction: (action: string, intent?: EquipIntent) => void;
+  onAction: (action: string, opts?: { verb?: IntentVerb; equip?: EquipIntent }) => void;
   onNewGame: () => void;
 }
 
 export default function GameScreen({
   state,
-  choices,
   streaming,
   pendingAction,
   liveRolls,
@@ -122,14 +119,11 @@ export default function GameScreen({
               </button>
             </div>
           ) : (
-            <div className="space-y-3">
-              <ChoiceButtons
-                choices={choices}
-                disabled={busy}
-                onChoose={onAction}
-              />
-              <ActionInput disabled={busy} onSubmit={onAction} />
-            </div>
+            <ActionInput
+              disabled={busy}
+              world={state.world}
+              onSubmit={(action, verb) => onAction(action, { verb })}
+            />
           )}
         </div>
 

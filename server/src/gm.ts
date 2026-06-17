@@ -9,6 +9,7 @@
 import type {
   EquipIntent,
   GameState,
+  IntentVerb,
   RollResult,
   TurnResult,
 } from "../../shared/types.js";
@@ -17,15 +18,18 @@ import { SYSTEM_PROMPT, buildContext } from "./systemPrompt.js";
 import {
   CHECKS_SCHEMA,
   RESOLVE_SCHEMA,
+  VERB_INTENT,
   applyChecks,
   applyEquip,
   applyResolution,
+  foeFromAction,
   newEffects,
   parseJSON,
   readCommitment,
   readIntent,
   readTarget,
   recordScene,
+  type Commitment,
   type Intent,
 } from "./turn.js";
 import { resolveIntentAction } from "./actions.js";
@@ -46,12 +50,22 @@ export interface RunTurnOptions {
   onRoll?: (roll: RollResult) => void;
 }
 
+/** The target string an engine resolver needs, taken from the player's own words.
+ *  `matchAnchor`/`matchService` parse a whole phrase, so travel/service pass it
+ *  through; attack strips the leading verb to name the foe; loot/rest ignore it. */
+function targetForIntent(intent: Intent, actionText: string): string {
+  if (intent === "attack") return foeFromAction(actionText);
+  if (intent === "travel" || intent === "service") return actionText;
+  return "";
+}
+
 export async function runTurn(
   state: GameState,
   playerAction: string,
   llm: LLMClient,
   opts: RunTurnOptions = {},
-  intent?: EquipIntent
+  intent?: EquipIntent,
+  verb?: IntentVerb
 ): Promise<TurnResult> {
   // A player equip/unequip is applied deterministically up front, so this turn's
   // context and narration already reflect the new gear. The normal three stages
@@ -97,12 +111,28 @@ export async function runTurn(
     temperature: 0.4,
   });
   const checksParsed = parseJSON(checksResp.content);
-  const commitment = readCommitment(checksParsed);
-  // On the opening turn (no player action) always take the generic scene-setting
-  // path — never let "begin the adventure" be misread as travel/rest/service.
+  // Resolve this turn's intent. An explicit verb from the verb bar is AUTHORITATIVE
+  // — the player declared it, so the engine never trusts the model's classification
+  // for it (the fix for combat/loot/bribe turns being misread as "generic"). A
+  // resolver that declines (e.g. "Take" with nothing to loot) returns null below and
+  // the turn falls through to Stage B. "other"/no verb (and the opening turn) defer
+  // to the model's Stage-A classification, exactly as before.
   // (`intent` is the equip param; this classification is `actionIntent`.)
-  const actionIntent: Intent = playerAction.trim() ? readIntent(checksParsed) : "generic";
-  const target = readTarget(checksParsed);
+  const verbInfo = verb && verb !== "other" ? VERB_INTENT[verb] : null;
+  let actionIntent: Intent;
+  let commitment: Commitment;
+  let target: string;
+  if (verbInfo) {
+    actionIntent = verbInfo.intent;
+    commitment = verbInfo.commitment;
+    target = targetForIntent(actionIntent, actionText);
+  } else {
+    commitment = readCommitment(checksParsed);
+    // On the opening turn (no player action) always take the generic scene-setting
+    // path — never let "begin the adventure" be misread as travel/rest/service.
+    actionIntent = playerAction.trim() ? readIntent(checksParsed) : "generic";
+    target = readTarget(checksParsed);
+  }
   // An attack is resolved entirely by the engine (it rolls the strike itself), so
   // skip Stage-A checks for it — otherwise the model's combat check would roll and
   // drain energy on top of the engine's own to-hit.

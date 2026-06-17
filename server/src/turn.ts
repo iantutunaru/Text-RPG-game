@@ -9,6 +9,7 @@ import type {
   AttributeKey,
   EquipIntent,
   GameState,
+  IntentVerb,
   Item,
   Journal,
   RollResult,
@@ -109,6 +110,38 @@ export function readIntent(parsed: Record<string, unknown>): Intent {
 /** The free-form destination/service target Stage A attached to the intent. */
 export function readTarget(parsed: Record<string, unknown>): string {
   return typeof parsed.target === "string" ? parsed.target.trim() : "";
+}
+
+// --- Explicit player verbs (the verb bar) ------------------------------------
+// The player DECLARES the intent by picking a verb, so the engine never has to
+// trust the model's Stage-A classification for it (the root cause of combat/loot/
+// bribe turns being misread as "generic"). "other" is absent here — it defers to
+// the model. "flee" is travel-while-in-combat (resolveTravel routes it to
+// fleeCombat); "talk"/"examine" are generic and carry an exploratory commitment so
+// they can never silently spend gold or move items.
+export const VERB_INTENT: Record<
+  Exclude<IntentVerb, "other">,
+  { intent: Intent; commitment: Commitment }
+> = {
+  attack: { intent: "attack", commitment: "committal" },
+  flee: { intent: "travel", commitment: "committal" },
+  go: { intent: "travel", commitment: "committal" },
+  take: { intent: "loot", commitment: "committal" },
+  pay: { intent: "service", commitment: "committal" },
+  rest: { intent: "rest", commitment: "committal" },
+  talk: { intent: "generic", commitment: "exploratory" },
+  examine: { intent: "generic", commitment: "exploratory" },
+};
+
+const ATTACK_LEAD_VERB = /^\s*(?:i\s+|i'?ll\s+|let me\s+)?[a-z']+\s+/i;
+const ATTACK_TRAILING = /\s+\b(?:out|down|up|over|cold|senseless|unconscious)\b\s*$/i;
+
+/** Best-effort foe name from an attack phrase: drop the leading verb and a trailing
+ *  particle ("Knock the woman out" → "the woman", "Attack the guard" → "the guard").
+ *  `resolveEnemy` (shared/enemies.ts) tolerates whatever remains (empty → "an
+ *  assailant"), so this need not be exact. */
+export function foeFromAction(action: string): string {
+  return action.trim().replace(ATTACK_LEAD_VERB, "").replace(ATTACK_TRAILING, "").trim();
 }
 
 // --- Stage B: mechanical effects, choices, and ending ---
