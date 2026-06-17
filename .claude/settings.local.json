@@ -20,7 +20,9 @@
       "Bash(Format-Table Name, FullName)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\\\\shared\" -Filter \"*.ts\" -Recurse)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Claude\\\\Text RPG game\" -Recurse -Depth 3)",
-      "Bash(xargs wc -l)"
+      "Bash(xargs wc -l)",
+      "Bash(ollama list *)",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }

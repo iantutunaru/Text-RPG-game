@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { Character, EquipIntent, Item } from "@shared";
+import type { Character, EquipIntent, IntentVerb, Item } from "@shared";
 import {
   ATTRIBUTE_KEYS,
   SPECIAL,
@@ -25,7 +25,7 @@ interface Props {
   items: Item[];
   busy: boolean;
   ended: boolean;
-  onAction: (action: string, intent?: EquipIntent) => void;
+  onAction: (action: string, opts?: { verb?: IntentVerb; equip?: EquipIntent }) => void;
   onClose: () => void;
 }
 
@@ -113,11 +113,11 @@ export default function CharacterSheet({
   const carried = items.filter((i) => !i.equipped);
 
   const equip = (name: string) => {
-    onAction(`Equip the ${name}.`, { type: "equip", item: name });
+    onAction(`Equip the ${name}.`, { equip: { type: "equip", item: name } });
     onClose();
   };
   const unequip = (name: string) => {
-    onAction(`Stow the ${name}.`, { type: "unequip", item: name });
+    onAction(`Stow the ${name}.`, { equip: { type: "unequip", item: name } });
     onClose();
   };
   const equipDisabled = busy || ended;

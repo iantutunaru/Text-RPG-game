@@ -7,6 +7,7 @@ import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type {
   EquipIntent,
+  IntentVerb,
   NewGameRequest,
   ServerEvent,
 } from "../../shared/types.js";
@@ -29,6 +30,20 @@ const PORT = Number(process.env.SERVER_PORT) || 3001;
 const llm = new OllamaClient();
 const app = express();
 app.use(express.json({ limit: "1mb" }));
+
+// The explicit action verbs the client's verb bar can send (mapped to engine
+// intents in server/src/turn.ts). Anything else is ignored → model classification.
+const ACTION_VERBS: IntentVerb[] = [
+  "attack",
+  "flee",
+  "go",
+  "take",
+  "pay",
+  "rest",
+  "talk",
+  "examine",
+  "other",
+];
 
 // --- Health check ---
 app.get("/api/health", (_req, res) => {
@@ -162,6 +177,13 @@ app.post("/api/game/:id/action", async (req, res) => {
     }
   }
 
+  // Optional explicit action verb from the verb bar; an unknown value is ignored
+  // (the turn then falls back to the model's Stage-A classification).
+  const rawVerb = req.body?.verb;
+  const verb = ACTION_VERBS.includes(rawVerb as IntentVerb)
+    ? (rawVerb as IntentVerb)
+    : undefined;
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -180,7 +202,8 @@ app.post("/api/game/:id/action", async (req, res) => {
         onToken: (text) => send({ type: "token", text }),
         onRoll: (roll) => send({ type: "roll", roll }),
       },
-      intent
+      intent,
+      verb
     );
     send({ type: "done", result });
   } catch (err) {

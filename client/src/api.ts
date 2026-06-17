@@ -4,6 +4,7 @@
 import type {
   EquipIntent,
   GameState,
+  IntentVerb,
   NewGameRequest,
   RollResult,
   ServerEvent,
@@ -46,17 +47,28 @@ export async function loadGame(id: string): Promise<GameState> {
   return res.json();
 }
 
-/** Stream a turn. Yields server events as they arrive. An optional equip/unequip
- *  intent is applied by the engine and narrated as part of the turn. */
+/** Options for a turn: the explicit `verb` the player chose (maps to an engine
+ *  intent server-side) and/or an equip/unequip intent applied before the turn. */
+export interface ActionOptions {
+  verb?: IntentVerb;
+  intent?: EquipIntent;
+}
+
+/** Stream a turn. Yields server events as they arrive. The optional `verb` declares
+ *  the player's intent; the optional equip intent is applied and narrated as part of
+ *  the turn. */
 export async function* streamAction(
   id: string,
   action: string,
-  intent?: EquipIntent
+  opts: ActionOptions = {}
 ): AsyncGenerator<ServerEvent> {
+  const body: Record<string, unknown> = { action };
+  if (opts.verb) body.verb = opts.verb;
+  if (opts.intent) body.intent = opts.intent;
   const res = await fetch(`/api/game/${id}/action`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(intent ? { action, intent } : { action }),
+    body: JSON.stringify(body),
   });
   if (!res.ok || !res.body) return asError(res);
 
